@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fed_prv_emg"
-version = "0.0.3a"
+version = "0.0.4"
 authors = [
   { name="Moshe Beutel", email="moshebeutel@gmail.com" },
 ]
 description = "A fedrated learning library of the EMG dataset"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
