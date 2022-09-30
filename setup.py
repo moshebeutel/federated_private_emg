@@ -2,8 +2,8 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="fed_prv_emg",
-    version="0.0.4",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    name="federated_private_emg",
+    version="0.0.4a2",
+    packages=find_packages(where="federated_private_emg"),
+    package_dir={"": "federated_private_emg"},
 )

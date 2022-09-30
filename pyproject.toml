@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fed_prv_emg"
-version = "0.0.4"
+name = "federated_private_emg"
+version = "0.0.4a2"
 authors = [
   { name="Moshe Beutel", email="moshebeutel@gmail.com" },
 ]
-description = "A fedrated learning library of the EMG dataset"
+description = "A federated learning library of the EMG dataset"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [

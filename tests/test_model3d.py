@@ -2,7 +2,7 @@ import logging
 # import unittest
 
 import torch
-from fed_prv_emg.fed_priv_models.model3d import Models3d
+from federated_private_emg.fed_priv_models.model3d import Model3d
 
 
 # class MyTestCase(unittest.TestCase):
@@ -13,7 +13,7 @@ from fed_prv_emg.fed_priv_models.model3d import Models3d
 def test_model3d():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(module)s:%(message)s')
     window = 259
-    model = Models3d(number_of_classes=64, window_size=window, depthwise_multiplier=32)
+    model = Model3d(number_of_classes=64, window_size=window, depthwise_multiplier=32)
 
     batch = 200
 

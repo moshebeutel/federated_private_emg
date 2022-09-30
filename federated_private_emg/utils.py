@@ -5,7 +5,6 @@ import sys
 import pandas as pd
 import re
 import errno
-import matplotlib.pyplot as plt
 
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
 FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
@@ -15,6 +14,13 @@ FULL_TRAJ_LIST = ['sequential', 'repeats_long', 'repeats_short']
 HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
 FEATURES_DATAFRAMES_DIR = 'features_dataframes'
 TD_FEATURES = ['WL', 'SSC', 'ZC', 'MAV']
+LOG_FOLDER = '/home/user/GIT/federated_private_emg/log'
+
+
+def labels_to_consecutive(labels):
+    labels[labels > 5] -= 2
+    labels -= 1
+    return labels
 
 
 def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
@@ -30,28 +36,8 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     handler.setLevel(logging.DEBUG)
     created_logger = logging.getLogger(name + '_logger')
     created_logger.addHandler(handler)
+    logging.getLogger(name).setLevel(level)
     return created_logger
-
-
-def show_learning_curve(train_loss_list, val_loss_list, train_accuracy, val_accuracy,
-                        num_epochs, title, figsize=(12, 12)):
-    fig, axes = plt.subplots(1, 2, figsize=figsize);
-    axes[0].set_xlabel('epochs')
-    axes[0].set_ylabel('loss')
-    axes[0].plot(range(num_epochs), train_loss_list, label="Train", color='blue')
-    axes[0].plot(range(num_epochs), val_loss_list, label="Validation", color='red')
-    axes[0].legend()
-    axes[0].set_title('Loss vs Epoch')
-
-    axes[1].set_xlabel('epochs')
-    axes[1].set_ylabel('accuracy')  # we already handled the x-label with ax1
-    axes[1].plot(range(num_epochs), train_accuracy, label="Train", color='blue')
-    axes[1].plot(range(num_epochs), val_accuracy, label="Validation", color='red')
-    axes[1].legend()
-    axes[1].set_title('Accuracy vs Epoch')
-
-    fig.suptitle(title)
-    plt.show()
 
 
 def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True, min_action=0):
@@ -68,9 +54,12 @@ def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True, min_action=0):
     return X, y
 
 
-def prepare_X_y_from_dataframe(df: pd.DataFrame, target='TRAJ_GT'):
+def prepare_X_y_from_dataframe(df: pd.DataFrame, target='TRAJ_GT', drop_cols=False):
     # remove "idle" and "relax"
     df = df[df[target] > 0]
+    if drop_cols:
+        for col in [c for c in COLS_TO_DROP if c in df.columns]:
+            df = df.drop(col, axis=1)
     y = df[target].to_numpy()
     X = df.drop([target], axis=1)
     X = X.to_numpy()
@@ -113,10 +102,24 @@ def get_traj_for_user(dir_path: str, traj: str, user: str):
     return traj_files_for_user[0], traj_files_for_user[1]
 
 
-def read_trial(trial: str) -> pd.DataFrame:
+def add_dummy_for_user_trajectory(trial, user, traj, users_list=FULL_USER_LIST, traj_list=FULL_TRAJ_LIST):
+    for u in users_list:
+        trial[f'u_{u}'] = 0
+    for t in traj_list:
+        trial[f't_{t}'] = 0
+    trial[f'u_{user}'] = 1
+    trial[f'u_{traj}'] = 1
+    return trial
+
+
+def read_trial(trial: str, hdf_folder: str = HDF_FILES_DIR, read_every: int = 1,
+               drop_cols: bool = False) -> pd.DataFrame:
     assert type(trial) == str, f'Got bad argument type - {type(trial)}'
     assert trial, 'Got an empty trial name'
-    filename_trial = os.path.join(HDF_FILES_DIR, trial)
+    filename_trial = os.path.join(hdf_folder, trial)
     assert os.path.exists(filename_trial), f'filename {filename_trial} does not exist'
-    record = pd.read_hdf(filename_trial)
+    record = pd.read_hdf(filename_trial)[::read_every]
+    if drop_cols:
+        for col in [c for c in COLS_TO_DROP if c in record.columns]:
+            record = record.drop(col, axis=1)
     return record

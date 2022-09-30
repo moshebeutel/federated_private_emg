@@ -5,11 +5,13 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 
+from utils import config_logger, LOG_FOLDER
 
-class Models3d(nn.Module):
+
+class Model3d(nn.Module):
     def __init__(self, number_of_classes, window_size=1280, depthwise_multiplier=32, W=3, H=8):
-        super(Models3d, self).__init__()
-        self.logger = logging.getLogger()
+        super(Model3d, self).__init__()
+        self.logger = config_logger(f'{Model3d}_logger', level=logging.DEBUG, log_folder=LOG_FOLDER)
         self._window = window_size > 3
         w_ker_siz = 3 if self._window else 1
         hw_ker_siz = 1 if self._window else 0
@@ -177,7 +179,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s:%(levelname)s:%(name)s:%(module)s:%(message)s')
     window = 259
-    model = Models3d(number_of_classes=64, window_size=window, depthwise_multiplier=32)
+    model = Model3d(number_of_classes=64, window_size=window, depthwise_multiplier=32)
 
     batch = 200
 
