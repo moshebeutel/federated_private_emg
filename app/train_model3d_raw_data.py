@@ -1,10 +1,9 @@
+from datetime import datetime
 import logging
 import os
-
 import torch
 from tqdm import tqdm
-# import wandb
-
+import wandb
 from utils import config_logger, labels_to_consecutive
 from federated_private_emg.fed_priv_models.model3d import Model3d
 
@@ -29,7 +28,7 @@ def eval_model(loader, model, criterion):
     y_pred, y_labels = [], []
     for k, batch in enumerate(loader):
         curr_batch_size = batch[1].size(0)
-        if curr_batch_size < BATCH_SIZE :
+        if curr_batch_size < BATCH_SIZE:
             continue
         counter += 1
         total_test += curr_batch_size
@@ -54,14 +53,65 @@ def eval_model(loader, model, criterion):
     return test_loss, test_acc
 
 
+def train_model(criterion, model, optimizer, test_loader, train_loader):
+    total_counter = 0
+    epoch_pbar = tqdm(range(NUM_EPOCHS))
+    model.train()
+    for epoch in epoch_pbar:
+        running_loss, correct_train, total_train, counter = 0, 0, 0, 0
+        y_pred, y_labels = [], []
+        for k, batch in enumerate(train_loader):
+            curr_batch_size = batch[1].size(0)
+            if curr_batch_size < BATCH_SIZE:
+                continue
+
+            counter += 1
+            total_counter += curr_batch_size
+            total_train += curr_batch_size
+            batch = (t.to(DEVICE) for t in batch)
+            emg, labels = batch
+            labels = labels_to_consecutive(labels)
+
+            optimizer.zero_grad()
+            outputs = model(emg.float())
+
+            loss = criterion(outputs, labels.long())
+            running_loss += float(loss)
+            _, predicted = torch.max(outputs.data, 1)
+            loss.backward()
+            optimizer.step()
+            correct = (predicted == labels).sum().item()
+            correct_train += int(correct)
+
+            y_pred += predicted.cpu().tolist()
+            y_labels += labels.cpu().tolist()
+        train_loss = running_loss / float(counter)
+        train_acc = 100 * correct_train / total_train
+        epoch_pbar.set_description(f'epoch {epoch} loss {train_loss} acc {train_acc}')
+        # if epoch % (EVAL_EVERY - 1) == 0:
+        test_loss, test_acc = eval_model(test_loader, model, criterion)
+        epoch_pbar.set_description(
+            f'epoch {epoch} loss {train_loss} acc {train_acc} test loss {test_loss} test acc {test_acc}')
+
+        if WRITE_TO_WANDB:
+            wandb.log({'epoch': epoch,
+                       'train_loss': train_loss,
+                       'train_acc': train_acc,
+                       'test_loss': test_acc,
+                       'test_acc': test_acc
+                       })
+
+
 def main():
-    exp_name = os.path.basename(__file__)
+    n = datetime.now()
+    time_str = f'_{n.year}_{n.month}_{n.day}_{n.hour}_{n.minute}_{n.second}'
+    exp_name = os.path.basename(__file__)[:-3] + time_str
     logger = config_logger(f'{exp_name}_logger',
                            level=logging.INFO, log_folder='../log/')
 
-    # if write_to_wandb:
-    #     wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
-    # wandb.config.update({})
+    if WRITE_TO_WANDB:
+        wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
+        # wandb.config.update({})
 
     logger.info(exp_name)
 
@@ -95,62 +145,7 @@ def main():
     model = Model3d(number_of_classes=NUM_CLASSES, window_size=WINDOW_SIZE)
     optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY, momentum=0.9)
     criterion = torch.nn.CrossEntropyLoss()
-    total_counter = 0
-    epoch_pbar = tqdm(range(NUM_EPOCHS))
-    model.train()
-    test_loss, test_acc = 1000, 0
-    for epoch in epoch_pbar:
-        running_loss, correct_train, total_train, counter = 0, 0, 0, 0
-        y_pred, y_labels = [], []
-        for k, batch in enumerate(train_loader):
-            curr_batch_size = batch[1].size(0)
-            if curr_batch_size < BATCH_SIZE :
-                continue
-
-            counter += 1
-            total_counter += curr_batch_size
-            total_train += curr_batch_size
-            batch = (t.to(DEVICE) for t in batch)
-            emg, labels = batch
-            labels = labels_to_consecutive(labels)
-
-            optimizer.zero_grad()
-            outputs = model(emg.float())
-
-            loss = criterion(outputs, labels.long())
-            running_loss += float(loss)
-            _, predicted = torch.max(outputs.data, 1)
-            loss.backward()
-            optimizer.step()
-            correct = (predicted == labels).sum().item()
-            correct_train += int(correct)
-
-            # if write_to_wandb:
-            #     wandb.log({'epoch': epoch,
-            #                'batch': k,
-            #                'running_loss': running_loss,
-            #                'acc': running_loss,
-            #                # 'test_avg_acc': test_avg_acc,
-            #                # 'best_acc': best_acc,
-            #                # 'best_val_loss': best_val_loss
-            #                })
-
-            y_pred += predicted.cpu().tolist()
-            y_labels += labels.cpu().tolist()
-        epoch_loss = running_loss / float(counter)
-        train_acc = 100 * correct_train / total_train
-        epoch_pbar.set_description(f'epoch {epoch} loss {epoch_loss} acc {train_acc}')
-        # if epoch % (EVAL_EVERY - 1) == 0:
-        test_loss, test_acc = eval_model(test_loader, model, criterion)
-        epoch_pbar.set_description(
-            f'epoch {epoch} loss {epoch_loss} acc {train_acc} test loss {test_loss} test acc {test_acc}')
-
-        # if WRITE_TO_WANDB:
-        #     wandb.log({'epoch': epoch,
-        #                'epoch_loss': train_acc,
-        #                'train_acc': train_acc,
-        #                'acc': running_loss
-        #                })
+    train_model(criterion, model, optimizer, test_loader, train_loader)
 
 
 if __name__ == '__main__':

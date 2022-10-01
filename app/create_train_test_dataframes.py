@@ -1,14 +1,17 @@
 import logging
 import os
-import utils
+
 import pandas as pd
+
+import utils
 from federated_private_emg.utils import config_logger, get_users_list_from_dir, \
-    get_traj_for_user, add_dummy_for_user_trajectory, read_trial
+    get_traj_for_user, read_trial
 
 DATA_DIR = '../data/Data-HDF5'  # '../data/reduced_dataframes'
 UNIFIED_DATA_DIR = '../data/unified_dataframes'
 READ_EVERY = 50
 NUM_USERS = 4
+
 
 def is_test(idx, traj):
     return (idx, traj) in [
@@ -52,7 +55,7 @@ def main():
 
     test_df = pd.concat(dfs_test, ignore_index=True, sort=False)
     del dfs_test
-    test_df.to_hdf(os.path.join(UNIFIED_DATA_DIR, 'test.hdf'), key='df',  mode='w')
+    test_df.to_hdf(os.path.join(UNIFIED_DATA_DIR, 'test.hdf'), key='df', mode='w')
     del test_df
     logger.info(f'Saved test df to hdf')
 
