@@ -12,13 +12,13 @@ WINDOWED_DATA_DIR = '../data/windowed_tensors_datasets'
 NUM_CLASSES = 7
 WINDOW_SIZE = 260
 
-BATCH_SIZE = 4
+BATCH_SIZE = 16
 NUM_WORKERS = 2
 DEVICE = 'cpu'
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-3
 NUM_EPOCHS = 100
-WRITE_TO_WANDB = False
+WRITE_TO_WANDB = True
 EVAL_EVERY = 1
 
 
@@ -53,7 +53,7 @@ def eval_model(loader, model, criterion):
     return test_loss, test_acc
 
 
-def train_model(criterion, model, optimizer, test_loader, train_loader):
+def train_model(criterion, model, optimizer, train_loader, test_loader):
     total_counter = 0
     epoch_pbar = tqdm(range(NUM_EPOCHS))
     model.train()
@@ -64,7 +64,6 @@ def train_model(criterion, model, optimizer, test_loader, train_loader):
             curr_batch_size = batch[1].size(0)
             if curr_batch_size < BATCH_SIZE:
                 continue
-
             counter += 1
             total_counter += curr_batch_size
             total_train += curr_batch_size
@@ -124,13 +123,15 @@ def main():
     assert train_x.shape[0] == train_y.shape[0], f'Found {train_y.shape[0]} labels for dataset size {train_x.shape[0]}'
     assert train_y.dim() == 1 or train_y.shape[1] == 1, f'Labels expected to have one dimension'
 
+    logger.info(f'Loaded train_x shape {train_x.shape} train_y shape {train_y.shape}')
+
     train_loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(train_x, train_y),
-        shuffle=False,
+        shuffle=True,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS
     )
-    logger.info(f'Loader created, Len {len(train_loader)}')
+    logger.info(f'Train Loader created, Len {len(train_loader)}')
 
     test_x = torch.load(os.path.join(WINDOWED_DATA_DIR, 'X_test_windowed.pt'))
     test_y = torch.load(os.path.join(WINDOWED_DATA_DIR, 'y_test_windowed.pt'))
@@ -145,7 +146,7 @@ def main():
     model = Model3d(number_of_classes=NUM_CLASSES, window_size=WINDOW_SIZE)
     optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY, momentum=0.9)
     criterion = torch.nn.CrossEntropyLoss()
-    train_model(criterion, model, optimizer, test_loader, train_loader)
+    train_model(criterion, model, optimizer, train_loader, test_loader)
 
 
 if __name__ == '__main__':
