@@ -8,9 +8,8 @@ from utils import config_logger
 TENSORS_DATA_DIR = '../data/tensors_datasets'
 WINDOWED_DATA_DIR = '../data/windowed_tensors_datasets'
 WINDOW_SIZE = 260
-WINDOW_SHIFT = int(WINDOW_SIZE / 13)
-WINDOW_SHIFT_LIST = [i * WINDOW_SHIFT for i in range(1, int(WINDOW_SIZE/WINDOW_SHIFT) - 1)]
-
+WINDOW_SHIFT = int(WINDOW_SIZE / 52)
+WINDOW_SHIFT_LIST = [i * WINDOW_SHIFT for i in range(1, int(WINDOW_SIZE / WINDOW_SHIFT))]
 
 
 def main():
@@ -20,12 +19,12 @@ def main():
 
     create_windows(x_filename='X_train', y_filename='y_train', output_fn=logger.info)
 
-    create_windows(x_filename='X_test', y_filename='y_test', window_shifts=[],  output_fn=logger.info)
+    create_windows(x_filename='X_test', y_filename='y_test', output_fn=logger.info)
 
 
 def create_windows(x_filename: str = 'X_train',
                    y_filename: str = 'y_train',
-                   window_shifts = WINDOW_SHIFT_LIST,
+                   window_shifts=WINDOW_SHIFT_LIST,
                    output_fn=pprint):
     output_fn(f'Load tensors from {x_filename}.pt')
     X = torch.load(os.path.join(TENSORS_DATA_DIR, x_filename + '.pt'))
@@ -43,6 +42,7 @@ def create_windows(x_filename: str = 'X_train',
     if window_shifts:
         X_windowed_list = [X_windowed]
         y_windowed_list = [y_windowed]
+        min_win_num = X_windowed.shape[0]
         for shift in window_shifts:
             assert shift < WINDOW_SIZE
             output_fn(f"Create shifted windows for shift {shift}")
@@ -51,15 +51,17 @@ def create_windows(x_filename: str = 'X_train',
             X_windowed_shifted, y_windowed_shifted = get_X_y_windowed(X[shift:], y[shift:], max_ind, output_fn)
             X_windowed_list.append(X_windowed_shifted)
             y_windowed_list.append(y_windowed_shifted)
+            assert X_windowed.shape[0] == y_windowed.shape[0], 'Window number not equals label number'
+            min_win_num = min(min_win_num, X_windowed_shifted.shape[0])
 
-
-        X_windowed = torch.concat(X_windowed_list, dim=1).reshape(-1, WINDOW_SIZE,X.shape[1])
-        y_windowed = torch.concat(y_windowed_list, dim=1).reshape(-1, WINDOW_SIZE)
+        X_windowed = torch.concat([x_win[:min_win_num, :, :] for x_win in X_windowed_list], dim=1) \
+            .reshape(-1, WINDOW_SIZE, X.shape[1])
+        y_windowed = torch.concat([y_win[:min_win_num] for y_win in y_windowed_list], dim=1).reshape(-1, WINDOW_SIZE)
 
     del X, y
     output_fn('Filter out windows with non-unique labels')
     unique_indices = [i for i, e in enumerate([list(set(y_windowed[i].tolist())) for i in range(y_windowed.shape[0])])
-                      if len(e) == 1]
+                      if (len(e) == 1 and e[0] == round(e[0]))]
     X_windowed = X_windowed[unique_indices]
     y_windowed = y_windowed[unique_indices].mean(dim=1)
     output_fn(f'Left with {len(unique_indices)} windows. X_windowed shape {X_windowed.shape}'

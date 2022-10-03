@@ -1,7 +1,10 @@
+from __future__ import annotations
 import logging
 import os
 import time
 import sys
+
+import numpy as np
 import pandas as pd
 import re
 import errno
@@ -113,13 +116,23 @@ def add_dummy_for_user_trajectory(trial, user, traj, users_list=FULL_USER_LIST, 
 
 
 def read_trial(trial: str, hdf_folder: str = HDF_FILES_DIR, read_every: int = 1,
+               read_every_fn: typing.Callable[[np.array, int], np.array] = None,
                drop_cols: bool = False) -> pd.DataFrame:
     assert type(trial) == str, f'Got bad argument type - {type(trial)}'
     assert trial, 'Got an empty trial name'
     filename_trial = os.path.join(hdf_folder, trial)
     assert os.path.exists(filename_trial), f'filename {filename_trial} does not exist'
-    record = pd.read_hdf(filename_trial)[::read_every]
+    record = pd.read_hdf(filename_trial)
     if drop_cols:
-        for col in [c for c in COLS_TO_DROP if c in record.columns]:
-            record = record.drop(col, axis=1)
+        cols2drop = [c for c in COLS_TO_DROP if c in record.columns]
+        record = record.drop(cols2drop, axis=1)
+    if read_every > 1:
+        record_values =  record.values[::read_every] if read_every_fn is None\
+            else read_every_fn(record.values, read_every)
+        record = pd.DataFrame(columns=record.columns, data=record_values)
     return record
+
+def read_every_mean_fn(a: np.array, read_every: int) -> np.array:
+    assert read_every < a.shape[0], f'read_every should be less than a.shape[0]. Got read_every = {read_every}'
+    return np.array([a[read_every*i:read_every*i+read_every].mean(axis=0)
+                     for i in range(int(a.shape[0] // read_every))])

@@ -9,15 +9,20 @@ from federated_private_emg.utils import config_logger, get_users_list_from_dir, 
 
 DATA_DIR = '../data/Data-HDF5'  # '../data/reduced_dataframes'
 UNIFIED_DATA_DIR = '../data/unified_dataframes'
-READ_EVERY = 50
-NUM_USERS = 4
+READ_EVERY = 100
+NUM_USERS = 12
 
 
 def is_test(idx, traj):
     return (idx, traj) in [
         (0, 'sequential'),
+        (0, 'repeats_short'),
+        (0, 'repeats_long'),
         (1, 'repeats_short'),
-        (2, 'repeats_long')
+        (2, 'repeats_long'),
+        (3, 'sequential'),
+        (4, 'repeats_short'),
+        (5, 'repeats_long')
     ]
 
 
@@ -42,7 +47,10 @@ def main():
             tr1, tr2 = get_traj_for_user(dir_path=DATA_DIR, traj=traj, user=u)
             logger.info(f'Found {traj} Trajectories for user {u}:\n{tr1}\n{tr2}')
 
-            dfs_train.append(read_trial(tr1, hdf_folder=DATA_DIR, read_every=READ_EVERY, drop_cols=True))
+            dfs_train.append(read_trial(tr1, hdf_folder=DATA_DIR,
+                                        read_every=READ_EVERY,
+                                        read_every_fn=utils.read_every_mean_fn,
+                                        drop_cols=True))
             # df.to_hdf(train_df_filename, key='df', mode='a')
             # del df
             df = read_trial(tr1, hdf_folder=DATA_DIR, read_every=READ_EVERY, drop_cols=True)
