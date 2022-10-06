@@ -16,7 +16,7 @@ import typing
 import wandb
 from tqdm import tqdm
 
-from common.config import Config, WRITE_TO_WANDB
+from common.config import Config
 
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
 FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
@@ -186,7 +186,8 @@ def run_single_epoch(loader: torch.utils.data.DataLoader,
         labels = labels_to_consecutive(labels)
         if model.training:
             global_sample_counter.increment(by=curr_batch_size)
-            optimizer.zero_grad()
+            if optimizer is not None:
+                optimizer.zero_grad()
         outputs = model(emg.float())
 
         loss = criterion(outputs, labels.long())
@@ -194,7 +195,8 @@ def run_single_epoch(loader: torch.utils.data.DataLoader,
         _, predicted = torch.max(outputs.data, 1)
         if model.training:
             loss.backward()
-            optimizer.step()
+            if optimizer is not None:
+                optimizer.step()
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
 
@@ -238,7 +240,7 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
 
 
 def wandb_log(epoch, test_acc, train_acc, train_loss):
-    if WRITE_TO_WANDB:
+    if Config.WRITE_TO_WANDB:
         wandb.log({'epoch': epoch,
                    'train_loss': train_loss,
                    'train_acc': train_acc,

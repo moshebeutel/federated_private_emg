@@ -10,37 +10,58 @@ import wandb
 from common import utils
 from federated_private_emg.fed_priv_models.model3d import Model3d
 from common.utils import init_data_loaders, SimpleGlobalCounter, wandb_log, run_single_epoch
-from common.config import Config, WRITE_TO_WANDB
+from common.config import Config
 
 
 def user_internal_train(criterion, local_model, optimizer, train_loader, test_loader, num_epochs: int = 1):
-    epoch_pbar = tqdm(range(num_epochs))
-    for epoch in epoch_pbar:
+    # epoch_pbar = tqdm(range(num_epochs))
+    # for epoch in epoch_pbar:
+    for _ in range(num_epochs):
+        optimizer.zero_grad()
         train_loss, train_acc = run_single_epoch(loader=train_loader,
                                                  model=local_model,
                                                  criterion=criterion,
-                                                 optimizer=optimizer,
+                                                 # optimizer=optimizer, Commented out. Preform steps after batch ends
                                                  global_sample_counter=SimpleGlobalCounter())
+        if Config.ADD_DP_NOISE:
+            add_dp_noise(local_model)
+
+        optimizer.step()
         local_model.eval()
         test_loss, test_acc = run_single_epoch(loader=test_loader, model=local_model, criterion=criterion)
         local_model.train()
-        epoch_pbar.set_description(f'user internal  epoch {epoch} loss {train_loss}'
-                                   f' acc {train_acc} test loss {test_loss} test acc {test_acc}')
+        # epoch_pbar.set_description(f'user internal  epoch {epoch} loss {train_loss}'
+        #                            f' acc {train_acc} test loss {test_loss} test acc {test_acc}')
 
     return train_loss, train_acc, test_loss, test_acc
 
 
-def federated_train_single_epoch(model, train_user_list, num_internal_epochs):
+def add_dp_noise(local_model):
+    grad_norm = 0
+    for p in local_model.parameters():
+        # Sum grid norms
+        grad_norm += float(torch.linalg.vector_norm(p.grad))
+    for p in local_model.parameters():
+        # Clip gradients
+        p.grad /= max(1, grad_norm / Config.DP_C)
+        # Add DP noise to gradients
+        noise = torch.randn_like(p.grad) * Config.DP_SIGMA * Config.DP_C
+        p.grad += noise
+        p.grad /= Config.BATCH_SIZE  # Averaging.Use batch as the 'Lot'
+
+
+def federated_train_single_epoch(model, train_user_list, num_internal_epochs, output_fn=lambda s: None):
     params = OrderedDict()
     for n, p in model.named_parameters():
         params[n] = torch.zeros_like(p.data)
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
-    user_pbar = tqdm(range(len(train_user_list)))
-    for i in user_pbar:
-        u = train_user_list[i]
+    # user_pbar = tqdm(range(len(train_user_list)))
+    # for i in user_pbar:
+    for u in train_user_list:
+        # u = train_user_list[i]
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
         test_loader, train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
-                                                      output_fn=lambda s: None)
+                                                      output_fn=output_fn)
         local_model = copy.deepcopy(model)
         local_model.train()
         optimizer = torch.optim.SGD(local_model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
@@ -58,22 +79,22 @@ def federated_train_single_epoch(model, train_user_list, num_internal_epochs):
         for n, p in local_model.named_parameters():
             params[n] += p.data
 
-        user_pbar.set_description(f'user train {u} loss {train_loss}'
-                                  f' acc {train_acc} test loss {test_loss} test acc {test_acc}')
+        # user_pbar.set_description(f'user train {u} loss {train_loss}'
+        #                           f' acc {train_acc} test loss {test_loss} test acc {test_acc}')
 
     # average parameters
     for n, p in params.items():
         params[n] = p / Config.NUM_CLIENT_AGG
 
     # update new parameters
-    #TODO batchnorm
+    # TODO batchnorm
     model.load_state_dict(params)
 
     return epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc
 
 
 def federated_train_model(model, train_user_list, validation_user_list, test_user_list, num_internal_epochs,
-                          num_epochs, output_fn):
+                          num_epochs, output_fn=lambda s: None):
     epoch_pbar = tqdm(range(num_epochs))
     for epoch in epoch_pbar:
         epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = \
@@ -97,7 +118,7 @@ def federated_train_model(model, train_user_list, validation_user_list, test_use
     test_loss, test_acc = 0, 0
     for u in test_user_list:
         test_loader, _ = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                           output_fn=print)
+                                           output_fn=output_fn)
         loss, acc = run_single_epoch(loader=test_loader, model=model, criterion=torch.nn.CrossEntropyLoss())
         test_loss += loss / len(test_user_list)
         test_acc += acc / len(test_user_list)
@@ -110,7 +131,7 @@ def main():
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
-    if WRITE_TO_WANDB:
+    if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         # wandb.config.update({})
 
@@ -119,9 +140,8 @@ def main():
 
     federated_train_model(model=model, train_user_list=['03', '04', '05', '08', '09'], validation_user_list=['06'],
                           test_user_list=['07'], num_internal_epochs=Config.NUM_INTERNAL_EPOCHS,
-                          num_epochs=Config.NUM_EPOCHS, output_fn=logger.info)
+                          num_epochs=Config.NUM_EPOCHS)
 
 
 if __name__ == '__main__':
     main()
-

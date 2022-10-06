@@ -19,6 +19,10 @@ class Config:
     EVAL_EVERY = 1
     NUM_CLIENT_AGG = 5
     NUM_INTERNAL_EPOCHS = 1
-
-
-WRITE_TO_WANDB = False
+    WRITE_TO_WANDB = False
+    # DP
+    ADD_DP_NOISE = True
+    DP_C = 0.001
+    DP_EPSILON = 9 / 20
+    DP_DELTA = 0.001
+    DP_SIGMA = 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
