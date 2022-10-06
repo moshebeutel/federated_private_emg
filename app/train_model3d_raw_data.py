@@ -6,7 +6,7 @@ import wandb
 from common import utils
 from federated_private_emg.fed_priv_models.model3d import Model3d
 from common.utils import train_model, init_data_loaders
-from common.config import Config, WRITE_TO_WANDB
+from common.config import Config
 
 
 def main():
@@ -14,7 +14,7 @@ def main():
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
-    if WRITE_TO_WANDB:
+    if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         # wandb.config.update({})
 

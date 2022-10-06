@@ -170,8 +170,7 @@ def read_every_mean_fn(a: np.array, read_every: int) -> np.array:
 def run_single_epoch(loader: torch.utils.data.DataLoader,
                      model: torch.nn.Module,
                      criterion: torch.nn.CrossEntropyLoss,
-                     optimizer: torch.optim.Optimizer = None,
-                     global_sample_counter: SimpleGlobalCounter = None) -> (float, float):
+                     optimizer: torch.optim.Optimizer = None) -> (float, float):
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
     y_pred, y_labels = [], []
     for k, batch in enumerate(loader):
@@ -184,10 +183,8 @@ def run_single_epoch(loader: torch.utils.data.DataLoader,
         batch = (t.to(Config.DEVICE) for t in batch)
         emg, labels = batch
         labels = labels_to_consecutive(labels)
-        if model.training:
-            global_sample_counter.increment(by=curr_batch_size)
-            if optimizer is not None:
-                optimizer.zero_grad()
+        if model.training and optimizer is not None:
+            optimizer.zero_grad()
         outputs = model(emg.float())
 
         loss = criterion(outputs, labels.long())
@@ -239,34 +236,59 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     return created_logger
 
 
-def wandb_log(epoch, test_acc, train_acc, train_loss):
+def wandb_log(epoch, test_acc, train_acc, train_loss, test_loss=0):
     if Config.WRITE_TO_WANDB:
         wandb.log({'epoch': epoch,
                    'train_loss': train_loss,
                    'train_acc': train_acc,
-                   'test_loss': test_acc,
+                   'test_loss': test_loss,
                    'test_acc': test_acc
                    })
 
 
-def train_model(criterion, model, optimizer, train_loader, test_loader, eval_every: int = 1, num_epochs: int = 1):
-    global_train_samples_counter = SimpleGlobalCounter()
+def train_model(criterion, model, optimizer, train_loader, test_loader,
+                num_epochs: int = 1, eval_every: int = 1,
+                epoch_level_optimization: bool = False,
+                add_dp_noise_before_optimization=False,
+                log2wandb=True,
+                show_pbar=True):
     test_loss, test_acc = 100, 0
-    epoch_pbar = tqdm(range(num_epochs))
+    train_loss, train_acc = 100, 0
+    eval_num = 0
+    epoch_pbar = tqdm(range(num_epochs)) if show_pbar else None
     model.train()
-    for epoch in epoch_pbar:
-        train_loss, train_acc = run_single_epoch(loader=train_loader, model=model, criterion=criterion,
-                                                 optimizer=optimizer,
-                                                 global_sample_counter=global_train_samples_counter)
-        epoch_pbar.set_description(f'epoch {epoch} loss {train_loss} acc {train_acc}')
-        if eval_every > 1 and epoch % (eval_every - 1) == 0:
-            model.eval()
-            test_loss, test_acc = run_single_epoch(loader=test_loader, model=model, criterion=criterion)
-            model.train()
-        epoch_pbar.set_description(
-            f'epoch {epoch} loss {train_loss} acc {train_acc} test loss {test_loss} test acc {test_acc}')
+    for epoch in (epoch_pbar if show_pbar else range(num_epochs)):
+        if epoch_level_optimization:
+            optimizer.zero_grad()  # optimization done at epoch level
+        epoch_train_loss, epoch_train_acc = \
+            run_single_epoch(loader=train_loader, model=model, criterion=criterion,
+                             optimizer=optimizer if not epoch_level_optimization else None
+                             )  # Do not pass optimizer if optimization is done once per epoch
+        if epoch_level_optimization:
+            if add_dp_noise_before_optimization:
+                add_dp_noise(model)
+            optimizer.step()  # optimization done at epoch level
 
-        wandb_log(epoch, test_acc, train_acc, train_loss)
+        if eval_every == 1 or (eval_every > 1 and epoch % (eval_every - 1)) == 0:
+            model.eval()
+            epoch_test_loss, epoch_test_acc = run_single_epoch(loader=test_loader, model=model, criterion=criterion)
+            model.train()
+            eval_num += 1
+            test_loss += epoch_test_loss
+            test_acc += epoch_test_acc
+        if show_pbar:
+            epoch_pbar.set_description(
+                f'epoch {epoch} loss {epoch_train_loss} acc {epoch_train_acc}'
+                f' test loss {epoch_test_loss} test acc {epoch_test_acc}')
+
+        if log2wandb:
+            wandb_log(epoch, train_loss=train_loss / num_epochs, train_acc=train_acc / num_epochs,
+                      test_loss=test_loss / eval_num, test_acc=test_acc / eval_num)
+
+        train_acc += epoch_train_acc
+        train_loss += epoch_train_acc
+
+    return train_loss / num_epochs, train_acc / num_epochs, test_loss / eval_num, test_acc / eval_num
 
 
 def init_data_loaders(datasets_folder_name,
@@ -303,3 +325,17 @@ def assert_loaded_datasets(train_x, train_y):
                                                   f'Batch size {Config.BATCH_SIZE}, Dataset {train_x.shape[0]}'
     assert train_x.shape[0] == train_y.shape[0], f'Found {train_y.shape[0]} labels for dataset size {train_x.shape[0]}'
     assert train_y.dim() == 1 or train_y.shape[1] == 1, f'Labels expected to have one dimension'
+
+
+def add_dp_noise(model):
+    grad_norm = 0
+    for p in model.parameters():
+        # Sum grid norms
+        grad_norm += float(torch.linalg.vector_norm(p.grad))
+    for p in model.parameters():
+        # Clip gradients
+        p.grad /= max(1, grad_norm / Config.DP_C)
+        # Add DP noise to gradients
+        noise = torch.randn_like(p.grad) * Config.DP_SIGMA * Config.DP_C
+        p.grad += noise
+        p.grad /= Config.BATCH_SIZE  # Averaging.Use batch as the 'Lot'
