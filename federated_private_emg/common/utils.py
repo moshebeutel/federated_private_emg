@@ -13,8 +13,6 @@ import errno
 
 import torch
 import typing
-import wandb
-from tqdm import tqdm
 
 from common.config import Config
 
@@ -167,43 +165,6 @@ def read_every_mean_fn(a: np.array, read_every: int) -> np.array:
                      for i in range(int(a.shape[0] // read_every))])
 
 
-def run_single_epoch(loader: torch.utils.data.DataLoader,
-                     model: torch.nn.Module,
-                     criterion: torch.nn.CrossEntropyLoss,
-                     optimizer: torch.optim.Optimizer = None) -> (float, float):
-    running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
-    y_pred, y_labels = [], []
-    for k, batch in enumerate(loader):
-        curr_batch_size = batch[1].size(0)
-        if curr_batch_size < Config.BATCH_SIZE:
-            continue
-        counter += 1
-
-        sample_counter += curr_batch_size
-        batch = (t.to(Config.DEVICE) for t in batch)
-        emg, labels = batch
-        labels = labels_to_consecutive(labels)
-        if model.training and optimizer is not None:
-            optimizer.zero_grad()
-        outputs = model(emg.float())
-
-        loss = criterion(outputs, labels.long())
-        running_loss += float(loss)
-        _, predicted = torch.max(outputs.data, 1)
-        if model.training:
-            loss.backward()
-            if optimizer is not None:
-                optimizer.step()
-        correct = (predicted == labels).sum().item()
-        correct_counter += int(correct)
-
-        y_pred += predicted.cpu().tolist()
-        y_labels += labels.cpu().tolist()
-    loss = running_loss / float(counter)
-    acc = 100 * correct_counter / sample_counter
-    return loss, acc
-
-
 def get_exp_name(module_name: str):
     n = datetime.now()
     time_str = f'_{n.year}_{n.month}_{n.day}_{n.hour}_{n.minute}_{n.second}'
@@ -236,86 +197,28 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     return created_logger
 
 
-def wandb_log(epoch, test_acc, train_acc, train_loss, test_loss=0):
-    if Config.WRITE_TO_WANDB:
-        wandb.log({'epoch': epoch,
-                   'train_loss': train_loss,
-                   'train_acc': train_acc,
-                   'test_loss': test_loss,
-                   'test_acc': test_acc
-                   })
-
-
-def train_model(criterion, model, optimizer, train_loader, test_loader,
-                num_epochs: int = 1, eval_every: int = 1,
-                epoch_level_optimization: bool = False,
-                add_dp_noise_before_optimization=False,
-                log2wandb=True,
-                show_pbar=True):
-    test_loss, test_acc = 100, 0
-    train_loss, train_acc = 100, 0
-    eval_num = 0
-    epoch_pbar = tqdm(range(num_epochs)) if show_pbar else None
-    model.train()
-    for epoch in (epoch_pbar if show_pbar else range(num_epochs)):
-        if epoch_level_optimization:
-            optimizer.zero_grad()  # optimization done at epoch level
-        epoch_train_loss, epoch_train_acc = \
-            run_single_epoch(loader=train_loader, model=model, criterion=criterion,
-                             optimizer=optimizer if not epoch_level_optimization else None
-                             )  # Do not pass optimizer if optimization is done once per epoch
-        if epoch_level_optimization:
-            if add_dp_noise_before_optimization:
-                add_dp_noise(model)
-            optimizer.step()  # optimization done at epoch level
-
-        if eval_every == 1 or (eval_every > 1 and epoch % (eval_every - 1)) == 0:
-            model.eval()
-            epoch_test_loss, epoch_test_acc = run_single_epoch(loader=test_loader, model=model, criterion=criterion)
-            model.train()
-            eval_num += 1
-            test_loss += epoch_test_loss
-            test_acc += epoch_test_acc
-        if show_pbar:
-            epoch_pbar.set_description(
-                f'epoch {epoch} loss {epoch_train_loss} acc {epoch_train_acc}'
-                f' test loss {epoch_test_loss} test acc {epoch_test_acc}')
-
-        if log2wandb:
-            wandb_log(epoch, train_loss=train_loss / num_epochs, train_acc=train_acc / num_epochs,
-                      test_loss=test_loss / eval_num, test_acc=test_acc / eval_num)
-
-        train_acc += epoch_train_acc
-        train_loss += epoch_train_acc
-
-    return train_loss / num_epochs, train_acc / num_epochs, test_loss / eval_num, test_acc / eval_num
-
-
 def init_data_loaders(datasets_folder_name,
-                      x_train_filename='X_train_windowed.pt',
-                      y_train_filename='y_train_windowed.pt',
-                      x_test_filename='X_test_windowed.pt',
-                      y_test_filename='y_test_windowed.pt',
+                      datasets=['train', 'validation', 'test'],
+                      batch_size=Config.BATCH_SIZE,
+                      num_workers=Config.NUM_WORKERS,
                       output_fn=print):
-    train_x, train_y = load_datasets(datasets_folder_name, x_train_filename, y_train_filename)
-    assert_loaded_datasets(train_x, train_y)
-    output_fn(f'Loaded train_x shape {train_x.shape} train_y shape {train_y.shape}')
-    train_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(train_x, train_y),
-        shuffle=True,
-        batch_size=Config.BATCH_SIZE,
-        num_workers=Config.NUM_WORKERS
-    )
-    test_x, test_y = load_datasets(datasets_folder_name, x_test_filename, y_test_filename)
-    assert_loaded_datasets(test_x, test_y)
-    test_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(test_x, test_y),
-        shuffle=False,
-        batch_size=Config.BATCH_SIZE,
-        num_workers=Config.NUM_WORKERS
-    )
-    output_fn(f'Test Loader created, Len {len(test_loader)}')
-    return test_loader, train_loader
+    loaders = []
+    assert datasets, 'Given empty datasets list'
+    for dataset in datasets:
+        X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt')
+        assert_loaded_datasets(X, y)
+        output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
+        loader = torch.utils.data.DataLoader(
+            torch.utils.data.TensorDataset(X, y),
+            shuffle=True,
+            batch_size=batch_size,
+            num_workers=num_workers
+        )
+        loaders.append(loader)
+        output_fn(f'Created {dataset} loader. Len = {len(loader)}')
+
+    assert len(loaders) == len(datasets), f'Given {len(datasets)}, Created {len(loaders)} loaders'
+    return tuple(loaders) if len(loaders) > 1 else loaders[0]
 
 
 def assert_loaded_datasets(train_x, train_y):
@@ -327,15 +230,3 @@ def assert_loaded_datasets(train_x, train_y):
     assert train_y.dim() == 1 or train_y.shape[1] == 1, f'Labels expected to have one dimension'
 
 
-def add_dp_noise(model):
-    grad_norm = 0
-    for p in model.parameters():
-        # Sum grid norms
-        grad_norm += float(torch.linalg.vector_norm(p.grad))
-    for p in model.parameters():
-        # Clip gradients
-        p.grad /= max(1, grad_norm / Config.DP_C)
-        # Add DP noise to gradients
-        noise = torch.randn_like(p.grad) * Config.DP_SIGMA * Config.DP_C
-        p.grad += noise
-        p.grad /= Config.BATCH_SIZE  # Averaging.Use batch as the 'Lot'

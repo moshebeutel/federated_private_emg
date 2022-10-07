@@ -9,7 +9,8 @@ from tqdm import tqdm
 import wandb
 from common import utils
 from federated_private_emg.fed_priv_models.model3d import Model3d
-from common.utils import init_data_loaders, wandb_log, run_single_epoch, add_dp_noise, train_model
+from common.utils import init_data_loaders
+from common.train_utils import run_single_epoch, train_model
 from common.config import Config
 
 
@@ -25,8 +26,8 @@ def federated_train_single_epoch(model, train_user_list, num_internal_epochs,
     for u in train_user_list:
         # u = train_user_list[i]
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
-        test_loader, train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
-                                                      output_fn=output_fn)
+        test_loader, validation_loader, train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
+                                                                         output_fn=output_fn)
         local_model = copy.deepcopy(model)
         local_model.train()
         optimizer = torch.optim.SGD(local_model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
@@ -34,11 +35,13 @@ def federated_train_single_epoch(model, train_user_list, num_internal_epochs,
         train_loss, train_acc, test_loss, test_acc = train_model(criterion=torch.nn.CrossEntropyLoss(),
                                                                  model=local_model, optimizer=optimizer,
                                                                  train_loader=train_loader,
+                                                                 validation_loader=validation_loader,
                                                                  test_loader=test_loader,
                                                                  num_epochs=num_internal_epochs,
-                                                                 eval_every=1, epoch_level_optimization=True,
+                                                                 validation_eval_every=1,
                                                                  add_dp_noise_before_optimization=
                                                                  add_dp_noise_during_training,
+                                                                 test_eval_at_end=False,
                                                                  log2wandb=False, show_pbar=False)
         epoch_train_loss += train_loss / len(train_user_list)
         epoch_train_acc += train_acc / len(train_user_list)
@@ -62,8 +65,10 @@ def federated_train_single_epoch(model, train_user_list, num_internal_epochs,
     return epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc
 
 
-def federated_train_model(model, train_user_list, validation_user_list, test_user_list, num_internal_epochs,
-                          num_epochs, add_dp_noise_during_training=False, output_fn=lambda s: None):
+def federated_train_model(model, train_user_list, validation_user_list,
+                          test_user_list, num_internal_epochs,
+                          num_epochs,
+                          add_dp_noise_during_training=False, output_fn=lambda s: None):
     epoch_pbar = tqdm(range(num_epochs))
     for epoch in epoch_pbar:
         epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = \
@@ -74,16 +79,15 @@ def federated_train_model(model, train_user_list, validation_user_list, test_use
         model.eval()
         val_loss, val_acc = 0, 0
         for u in validation_user_list:
-            validation_loader, _ = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                                     x_test_filename='X_validation_windowed.pt',
-                                                     y_test_filename='y_validation_windowed.pt',
-                                                     output_fn=lambda s: None)
+            validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                                  datasets=['validation'],
+                                                  output_fn=lambda s: None)
             loss, acc = run_single_epoch(loader=validation_loader, model=model, criterion=torch.nn.CrossEntropyLoss())
             val_loss += loss / len(validation_user_list)
             val_acc += acc / len(validation_user_list)
 
-        wandb_log(epoch, train_loss=epoch_train_loss, train_acc=epoch_train_acc,
-                  test_loss=epoch_test_loss, test_acc=epoch_test_acc)
+        # wandb_log(epoch, train_loss=epoch_train_loss, train_acc=epoch_train_acc,
+        #           test_loss=epoch_test_loss, test_acc=epoch_test_acc)
 
         epoch_pbar.set_description(f'federated global epoch {epoch} '
                                    f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
@@ -93,8 +97,9 @@ def federated_train_model(model, train_user_list, validation_user_list, test_use
     # Test Eval
     test_loss, test_acc = 0, 0
     for u in test_user_list:
-        test_loader, _ = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                           output_fn=lambda s: None)
+        test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                        datasets=['test'],
+                                        output_fn=lambda s: None)
         loss, acc = run_single_epoch(loader=test_loader, model=model, criterion=torch.nn.CrossEntropyLoss())
         test_loss += loss / len(test_user_list)
         test_acc += acc / len(test_user_list)

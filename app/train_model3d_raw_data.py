@@ -5,7 +5,8 @@ import torch
 import wandb
 from common import utils
 from federated_private_emg.fed_priv_models.model3d import Model3d
-from common.utils import train_model, init_data_loaders
+from common.utils import init_data_loaders
+from common.train_utils import train_model
 from common.config import Config
 
 
@@ -18,19 +19,25 @@ def main():
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         # wandb.config.update({})
 
-    test_loader, train_loader = init_data_loaders(datasets_folder_name=Config.WINDOWED_DATA_DIR, output_fn=logger.info)
+    train_loader, validation_loader, test_loader = init_data_loaders(datasets_folder_name=Config.WINDOWED_DATA_DIR,
+                                                                     output_fn=logger.info)
 
     model = Model3d(number_of_classes=Config.NUM_CLASSES, window_size=Config.WINDOW_SIZE, output_info_fn=logger.info,
                     output_debug_fn=logger.debug)
+    # model.to('cuda')
     optimizer = torch.optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
                                 momentum=0.9)
     criterion = torch.nn.CrossEntropyLoss()
-    train_model(criterion, model,
-                optimizer,
-                train_loader,
-                test_loader,
-                eval_every=Config.EVAL_EVERY,
-                num_epochs=Config.NUM_EPOCHS)
+    train_model(criterion=criterion,
+                model=model,
+                optimizer=optimizer,
+                train_loader=train_loader,
+                validation_loader=validation_loader,
+                test_loader=test_loader,
+                validation_eval_every=Config.EVAL_EVERY,
+                num_epochs=Config.NUM_EPOCHS,
+                log2wandb=Config.WRITE_TO_WANDB,
+                add_dp_noise_before_optimization=False)
 
 
 if __name__ == '__main__':
