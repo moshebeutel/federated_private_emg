@@ -1,53 +1,60 @@
 from __future__ import annotations
 
-import logging
+from dataclasses import astuple
 
 import torch
 import wandb
 from tqdm import tqdm
 
-from common.config import Config
-from common.utils import labels_to_consecutive
+# from common.config import Config
+from common.utils import labels_to_consecutive, calc_grad_norm
+from differential_privacy.params import DpParams
+from differential_privacy.utils import add_dp_noise
+from train.params import TrainParams
+from train.train_objects import TrainObjects
 
 
-def run_single_epoch(loader: torch.utils.data.DataLoader,
-                     model: torch.nn.Module,
-                     criterion: torch.nn.CrossEntropyLoss,
-                     optimizer: torch.optim.Optimizer = None,
-                     add_dp_noise_before_optimization: bool = False,
-                     optimizer_step_every: int = 1) -> (float, float):
-    assert not model.training or optimizer is not None, 'None Optimizer  given at train epoch'
+def run_single_epoch(train_objects: TrainObjects,
+                     train_params: TrainParams,
+                     dp_params: DpParams = None) -> (float, float):
+
+    device = next(train_objects.model.parameters()).device
+    _, batch_size, descent_every, _, _, add_dp_noise_before_optimization = astuple(train_params)
+    assert not train_objects.model.training or train_objects.optimizer is not None,\
+        'None Optimizer  given at train epoch'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
 
     y_pred, y_labels = [], []
-    for k, batch in enumerate(loader):
+    for k, batch in enumerate(train_objects.loader):
         curr_batch_size = batch[1].size(0)
-        if curr_batch_size < Config.BATCH_SIZE:
+        if curr_batch_size < batch_size:
             continue
         counter += 1
 
         sample_counter += curr_batch_size
-        batch = (t.to(Config.DEVICE) for t in batch)
+        batch = (t.to(device) for t in batch)
         emg, labels = batch
         labels = labels_to_consecutive(labels).squeeze()
 
-        if model.training and \
-                (optimizer_step_every == 1 or
-                 (optimizer_step_every > 1 and ((k+1) % optimizer_step_every) == 1)):
+        if train_objects.model.training and \
+                (descent_every == 1 or
+                 (descent_every > 1 and ((k + 1) % descent_every) == 1)):
             # opimizer.zero_grad() done
             # at first batch or if optimizer.step() done at previous batch
-            optimizer.zero_grad()
-        outputs = model(emg.float())
 
-        loss = criterion(outputs, labels.long()) / optimizer_step_every
+            train_objects.optimizer.zero_grad()
+
+        outputs = train_objects.model(emg.float())
+
+        loss = train_objects.criterion(outputs, labels.long()) / descent_every
         running_loss += float(loss)
         _, predicted = torch.max(outputs.data, 1)
-        if model.training:
+        if train_objects.model.training:
             loss.backward()
-            if optimizer_step_every == 1 or optimizer_step_every > 1 and ((k+1) % optimizer_step_every) == 0:
+            if descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0:
                 if add_dp_noise_before_optimization:
-                    add_dp_noise(model)
-                optimizer.step()
+                    add_dp_noise(train_objects.model, params=dp_params)
+                train_objects.optimizer.step()
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
 
@@ -58,34 +65,34 @@ def run_single_epoch(loader: torch.utils.data.DataLoader,
     return loss, acc
 
 
-def train_model(criterion, model, optimizer,
-                train_loader,
+def train_model(train_objects: TrainObjects,
                 validation_loader,
                 test_loader,
-                num_epochs: int = 1,
-                validation_eval_every: int = 1,
-                test_eval_at_end: bool = True,
-                add_dp_noise_before_optimization=False,
-                log2wandb=True,
-                show_pbar=True):
+                train_params: TrainParams,
+                dp_params=None,
+                log2wandb: bool = True,
+                show_pbar: bool = True,
+                output_fn=lambda s: None):
+    num_epochs, _, _, validation_eval_every, test_eval_at_end, add_dp_noise_before_optimization = astuple(train_params)
+    eval_params = TrainParams(epochs=1, batch_size=train_params.batch_size)
     train_loss, train_acc, validation_loss, validation_acc = 0, 0, 0, 0
     eval_num = 0
     range_epochs = range(1, num_epochs + 1)
     epoch_pbar = tqdm(range_epochs) if show_pbar else None
-    model.train()
+    train_objects.model.train()
     for epoch in (epoch_pbar if show_pbar else range_epochs):
 
         epoch_train_loss, epoch_train_acc = \
-            run_single_epoch(loader=train_loader, model=model, criterion=criterion,
-                             optimizer=optimizer,
-                             add_dp_noise_before_optimization=add_dp_noise_before_optimization,
-                             optimizer_step_every=2)
+            run_single_epoch(train_objects=train_objects,
+                             train_params=train_params,
+                             dp_params=dp_params)
 
         if validation_eval_every == 1 or (validation_eval_every > 1 and epoch % (validation_eval_every - 1)) == 0:
-            model.eval()
-            epoch_validation_loss, epoch_validation_acc = run_single_epoch(loader=validation_loader, model=model,
-                                                                           criterion=criterion)
-            model.train()
+            train_objects.model.eval()
+            epoch_validation_loss, epoch_validation_acc = \
+                run_single_epoch(train_objects=TrainObjects(loader=validation_loader, model=train_objects.model),
+                                 train_params=eval_params)
+            train_objects.model.train()
             eval_num += 1
             validation_loss += epoch_validation_loss
             validation_acc += epoch_validation_acc
@@ -110,23 +117,11 @@ def train_model(criterion, model, optimizer,
                        'validation_acc': validation_acc / eval_num
                        })
     if test_eval_at_end:
-        model.eval()
-        test_loss, test_acc = run_single_epoch(loader=test_loader, model=model, criterion=criterion)
+        train_objects.model.eval()
+        test_loss, test_acc = run_single_epoch(train_objects=TrainObjects(loader=test_loader, model=train_objects.model),
+                                               train_params=eval_params)
+        output_fn(f'Test Loss {test_loss} Tesdt Acc {test_acc}')
         if log2wandb:
             wandb.log({'test_loss': test_loss, 'test_acc': test_loss})
 
     return train_loss / num_epochs, train_acc / num_epochs, validation_loss / eval_num, validation_acc / eval_num
-
-
-def add_dp_noise(model):
-    grad_norm = 0
-    for p in model.parameters():
-        # Sum grid norms
-        grad_norm += float(torch.linalg.vector_norm(p.grad))
-    for p in model.parameters():
-        # Clip gradients
-        p.grad /= max(1, grad_norm / Config.DP_C)
-        # Add DP noise to gradients
-        noise = torch.randn_like(p.grad) * Config.DP_SIGMA * Config.DP_C
-        p.grad += noise
-        p.grad /= Config.BATCH_SIZE  # Averaging.Use batch as the 'Lot'

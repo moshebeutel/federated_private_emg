@@ -230,3 +230,9 @@ def assert_loaded_datasets(train_x, train_y):
     assert train_y.dim() == 1 or train_y.shape[1] == 1, f'Labels expected to have one dimension'
 
 
+def calc_grad_norm(model):
+    grad_norm = 0
+    for p in model.parameters():
+        # Sum grid norms
+        grad_norm += float(torch.linalg.vector_norm(p.grad))
+    return grad_norm
