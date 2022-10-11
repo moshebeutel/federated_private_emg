@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from datetime import datetime
-
+from math import sqrt, pow
 import numpy as np
 import pandas as pd
 import re
@@ -233,6 +233,6 @@ def assert_loaded_datasets(train_x, train_y):
 def calc_grad_norm(model):
     grad_norm = 0
     for p in model.parameters():
-        # Sum grid norms
-        grad_norm += float(torch.linalg.vector_norm(p.grad))
-    return grad_norm
+        # Sum grad squared norms
+        grad_norm += pow(float(torch.linalg.vector_norm(p.grad)), 2.0)
+    return sqrt(grad_norm)

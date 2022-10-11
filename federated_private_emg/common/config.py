@@ -14,7 +14,7 @@ class Config:
     NUM_EPOCHS = 30
     NUM_WORKERS = 2
     OPTIMIZER_TYPE = 'sgd'
-    LEARNING_RATE = 0.00649
+    LEARNING_RATE = 0.00649 * 20
     WEIGHT_DECAY = 1e-3
     MOMENTUM = 0.9
     UNIFIED_DATA_DIR = '../data/unified_dataframes'
@@ -29,11 +29,11 @@ class Config:
     WRITE_TO_WANDB = False
     # DP
     ADD_DP_NOISE = True
-    LOT_SIZE_IN_BATCHES = 5
-    DP_C = 1
+    LOT_SIZE_IN_BATCHES = 10
+    DP_C = 5
     DP_EPSILON = 1.0
     DP_DELTA = 0.001
-    DP_SIGMA = 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
+    DP_SIGMA = 0.01 *  3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
 
     @staticmethod
     def to_dict() -> dict:
