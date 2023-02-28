@@ -14,7 +14,7 @@ class Model3d(nn.Module):
                  depthwise_multiplier=32,
                  W=3,
                  H=8,
-                 use_batch_norm=False,
+                 use_group_norm=False,
                  use_dropout=False,
                  output_info_fn=print, output_debug_fn=None):
         super(Model3d, self).__init__()
@@ -33,35 +33,35 @@ class Model3d(nn.Module):
         # Downsample 3 stripes to 1
         self._conv_block1 = Conv3DBlock(depthwise_multiplier, depthwise_multiplier,
                                         kernel_size=(w_ker_siz, 3, 3), pool_kernel_size=(1, 3, 1),
-                                        use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+                                        use_groupnorm=use_group_norm, use_dropout=use_dropout)
 
         # Downsample time dimension
         if self._window:
             self._conv_block2 = Conv2DBlock(depthwise_multiplier, 2 * depthwise_multiplier,
                                             kernel_size=(w_ker_siz, 3),
                                             stride=(2, 2),
-                                            pool_kernel_size=(3, 3), use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+                                            pool_kernel_size=(3, 3), use_groupnorm=use_group_norm, use_dropout=use_dropout)
 
             self._conv_block3 = Conv1DBlock(2 * depthwise_multiplier, 4 * depthwise_multiplier,
                                             kernel_size=w_ker_siz,
                                             stride=2,
-                                            pool_kernel_size=3, use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+                                            pool_kernel_size=3, use_groupnorm=use_group_norm, use_dropout=use_dropout)
 
             self._conv_block4 = Conv1DBlock(4 * depthwise_multiplier, 8 * depthwise_multiplier,
                                             kernel_size=w_ker_siz,
                                             stride=2,
-                                            pool_kernel_size=3, use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+                                            pool_kernel_size=3, use_groupnorm=use_group_norm, use_dropout=use_dropout)
 
         self.flatten = lambda x: x.view(-1, 8 * depthwise_multiplier)
 
-        self._dense_block1 = DenseBlock(8 * depthwise_multiplier, 8 * depthwise_multiplier,
-                                        use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+        self._dense_block1 = DenseBlock(8 * depthwise_multiplier, 8 * depthwise_multiplier)
+                                        # use_batchnorm=use_group_norm, use_dropout=use_dropout)
 
-        self._dense_block2 = DenseBlock(8 * depthwise_multiplier, 4 * depthwise_multiplier,
-                                        use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+        self._dense_block2 = DenseBlock(8 * depthwise_multiplier, 4 * depthwise_multiplier)
+                                        # use_batchnorm=use_group_norm, use_dropout=use_dropout)
 
-        self._dense_block3 = DenseBlock(4 * depthwise_multiplier, 2 * depthwise_multiplier,
-                                        use_batchnorm=use_batch_norm, use_dropout=use_dropout)
+        self._dense_block3 = DenseBlock(4 * depthwise_multiplier, 2 * depthwise_multiplier)
+                                        # use_batchnorm=use_group_norm, use_dropout=use_dropout)
 
         self._output = nn.Linear(2 * depthwise_multiplier, number_of_classes)
 

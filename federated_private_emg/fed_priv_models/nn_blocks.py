@@ -8,12 +8,13 @@ class Conv3DBlock(nn.Module):
                  out_channels,
                  kernel_size,
                  pool_kernel_size,
-                 use_batchnorm=False,
+                 use_groupnorm=False,
+                 num_groups=4,
                  use_dropout=False):
         super(Conv3DBlock, self).__init__()
         self._conv = nn.Conv3d(1, in_channels, groups=1, kernel_size=kernel_size)
         self._pool = nn.AvgPool3d(kernel_size=pool_kernel_size)
-        self._batch_norm = nn.BatchNorm3d(out_channels) if use_batchnorm \
+        self._group_norm = nn.GroupNorm(num_groups=num_groups, num_channels=out_channels) if use_groupnorm \
             else torch.nn.Identity(out_channels)
         self._relu = nn.ReLU(out_channels)
         self._dropout = nn.Dropout3d(.5) if use_dropout \
@@ -21,7 +22,7 @@ class Conv3DBlock(nn.Module):
 
     def forward(self, x):
         # return self._dropout(self._relu(self._batch_norm(self._conv(x))))
-        return F.relu(self._dropout(self._batch_norm(self._pool(self._conv(x)))))
+        return F.relu(self._dropout(self._group_norm(self._pool(self._conv(x)))))
 
 
 class Conv2DBlock(nn.Module):
@@ -29,12 +30,13 @@ class Conv2DBlock(nn.Module):
                  out_channels,
                  kernel_size, stride,
                  pool_kernel_size,
-                 use_batchnorm=False,
+                 use_groupnorm=False,
+                 num_groups=4,
                  use_dropout=False):
         super(Conv2DBlock, self).__init__()
         self._conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride)
         self._pool = nn.AvgPool2d(kernel_size=pool_kernel_size)
-        self._batch_norm = nn.BatchNorm2d(out_channels) if use_batchnorm \
+        self._group_norm = nn.GroupNorm(num_groups=num_groups, num_channels=out_channels) if use_groupnorm \
             else torch.nn.Identity(out_channels)
         self._relu = nn.ReLU(out_channels)
         self._dropout = nn.Dropout2d(.5) if use_dropout \
@@ -42,7 +44,7 @@ class Conv2DBlock(nn.Module):
 
     def forward(self, x):
         # return self._dropout(self._relu(self._batch_norm(self._conv(x))))
-        return F.relu(self._dropout(self._batch_norm(self._pool(self._conv(x)))))
+        return F.relu(self._dropout(self._group_norm(self._pool(self._conv(x)))))
 
 
 class Conv1DBlock(nn.Module):
@@ -50,12 +52,13 @@ class Conv1DBlock(nn.Module):
                  out_channels,
                  kernel_size, stride,
                  pool_kernel_size,
-                 use_batchnorm=False,
+                 use_groupnorm=False,
+                 num_groups=4,
                  use_dropout=False):
         super(Conv1DBlock, self).__init__()
         self._conv = nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=stride)
         self._pool = nn.AvgPool1d(kernel_size=pool_kernel_size)
-        self._batch_norm = nn.BatchNorm1d(out_channels) if use_batchnorm \
+        self._group_norm = nn.GroupNorm(num_groups=num_groups, num_channels=out_channels) if use_groupnorm \
             else torch.nn.Identity(out_channels)
         self._relu = nn.ReLU(out_channels)
         self._dropout = nn.Dropout(.5) if use_dropout \
@@ -63,7 +66,7 @@ class Conv1DBlock(nn.Module):
 
     def forward(self, x):
         # return self._dropout(self._relu(self._batch_norm(self._conv(x))))
-        return F.relu(self._dropout(self._batch_norm(self._pool(self._conv(x)))))
+        return F.relu(self._dropout(self._group_norm(self._pool(self._conv(x)))))
 
 
 class DenseBlock(nn.Module):

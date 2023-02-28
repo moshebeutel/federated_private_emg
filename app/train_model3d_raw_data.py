@@ -28,7 +28,7 @@ def main():
     model = Model3d(number_of_classes=Config.NUM_CLASSES,
                     window_size=Config.WINDOW_SIZE,
                     use_dropout=Config.USE_DROPOUT,
-                    use_batch_norm=Config.USE_BATCHNORM,
+                    use_group_norm=Config.USE_BATCHNORM,
                     output_info_fn=logger.info,
                     output_debug_fn=logger.debug)
     model.to(Config.DEVICE)
