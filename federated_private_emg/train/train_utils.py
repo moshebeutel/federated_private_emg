@@ -14,13 +14,49 @@ from train.params import TrainParams
 from train.train_objects import TrainObjects
 
 
+def run_single_epoch_return_grads(train_objects: TrainObjects,
+                                  batch_size: int) -> (float, float):
+    device = next(train_objects.model.parameters()).device
+
+    assert train_objects.model.training, 'Model not in train mode'
+    running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
+
+    y_pred, y_labels = [], []
+    for k, batch in enumerate(train_objects.loader):
+        curr_batch_size = batch[1].size(0)
+        if curr_batch_size < batch_size:
+            continue
+        counter += 1
+
+        sample_counter += curr_batch_size
+        batch = (t.to(device) for t in batch)
+        emg, labels = batch
+        labels = labels_to_consecutive(labels).squeeze()
+
+        outputs = train_objects.model(emg.float())
+
+        loss = train_objects.criterion(outputs, labels.long())
+        running_loss += float(loss)
+        _, predicted = torch.max(outputs.data, 1)
+        if train_objects.model.training:
+            loss.backward()
+
+        correct = (predicted == labels).sum().item()
+        correct_counter += int(correct)
+
+        y_pred += predicted.cpu().tolist()
+        y_labels += labels.cpu().tolist()
+    loss = running_loss / float(counter)
+    acc = 100 * correct_counter / sample_counter
+    return loss, acc
+
+
 def run_single_epoch(train_objects: TrainObjects,
                      train_params: TrainParams,
                      dp_params: DpParams = None) -> (float, float):
-
     device = next(train_objects.model.parameters()).device
     _, batch_size, descent_every, _, _, add_dp_noise_before_optimization = astuple(train_params)
-    assert not train_objects.model.training or train_objects.optimizer is not None,\
+    assert not train_objects.model.training or train_objects.optimizer is not None, \
         'None Optimizer  given at train epoch'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
 
@@ -39,7 +75,7 @@ def run_single_epoch(train_objects: TrainObjects,
         if train_objects.model.training and \
                 (descent_every == 1 or
                  (descent_every > 1 and ((k + 1) % descent_every) == 1)):
-            # opimizer.zero_grad() done
+            # optimizer.zero_grad() done
             # at first batch or if optimizer.step() done at previous batch
 
             train_objects.optimizer.zero_grad()
@@ -103,7 +139,7 @@ def train_model(train_objects: TrainObjects,
                 f' epoch validation acc {round(epoch_validation_acc, 3)}')
 
         train_acc += epoch_train_acc
-        train_loss += epoch_train_acc
+        train_loss += epoch_train_loss
 
         if log2wandb:
             wandb.log({'epoch': epoch,
@@ -118,9 +154,10 @@ def train_model(train_objects: TrainObjects,
                        })
     if test_eval_at_end:
         train_objects.model.eval()
-        test_loss, test_acc = run_single_epoch(train_objects=TrainObjects(loader=test_loader, model=train_objects.model),
-                                               train_params=eval_params)
-        output_fn(f'Test Loss {test_loss} Tesdt Acc {test_acc}')
+        test_loss, test_acc = run_single_epoch(
+            train_objects=TrainObjects(loader=test_loader, model=train_objects.model),
+            train_params=eval_params)
+        output_fn(f'Test Loss {test_loss} Test Acc {test_acc}')
         if log2wandb:
             wandb.log({'test_loss': test_loss, 'test_acc': test_loss})
 
