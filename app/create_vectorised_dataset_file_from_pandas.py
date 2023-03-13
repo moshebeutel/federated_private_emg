@@ -37,12 +37,12 @@ def save_df_to_tensor_single_dataset(df_folder, tensors_folder, dataset, logger)
         logger.info(f'Loaded train dataframe with {df.shape[0]} rows and columns {df.columns}')
         X, y = prepare_X_y_from_dataframe(df, drop_cols=True)
         logger.info(f'Prepared X, y with X.shape {X.shape} y.shape {y.shape}')
-        with open(os.path.join(tensors_folder, f'X_{dataset}.npy'), 'wb') as f:
-            np.save(f, X)
-        logger.info(f'Finished saving X_{dataset}.npy')
-        with open(os.path.join(tensors_folder, f'y_{dataset}.npy'), 'wb') as f:
-            np.save(f, y)
-        logger.info(f'Finished saving y_{dataset}.npy')
+        # with open(os.path.join(tensors_folder, f'X_{dataset}.npy'), 'wb') as f:
+        #     np.save(f, X)
+        # logger.info(f'Finished saving X_{dataset}.npy')
+        # with open(os.path.join(tensors_folder, f'y_{dataset}.npy'), 'wb') as f:
+        #     np.save(f, y)
+        # logger.info(f'Finished saving y_{dataset}.npy')
         torch.save(torch.from_numpy(X), os.path.join(tensors_folder, f'X_{dataset}.pt'))
         logger.info(f'Finished saving X_{dataset}.pt')
         torch.save(torch.from_numpy(y), os.path.join(tensors_folder, f'y_{dataset}.pt'))

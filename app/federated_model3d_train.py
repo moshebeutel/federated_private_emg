@@ -26,7 +26,9 @@ def single_train():
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
-    model = Model3d(number_of_classes=Config.NUM_CLASSES, window_size=Config.WINDOW_SIZE, use_group_norm=True,
+    model = Model3d(number_of_classes=Config.NUM_CLASSES,
+                    window_size=Config.WINDOW_SIZE,
+                    use_group_norm=True,
                     output_info_fn=logger.info,
                     output_debug_fn=logger.debug)
     model.to(Config.DEVICE)
@@ -34,7 +36,7 @@ def single_train():
                          dp_C=Config.DP_C)
     internal_train_params = TrainParams(epochs=Config.NUM_INTERNAL_EPOCHS, batch_size=Config.BATCH_SIZE,
                                         descent_every=Config.LOT_SIZE_IN_BATCHES, validation_every=Config.EVAL_EVERY,
-                                        test_at_end=False, add_dp_noise=Config.ADD_DP_NOISE)
+                                        test_at_end=False)
     federated_train_model(model=model,
                           train_user_list=['03', '05', '06', '08', '09', '11', '13', '14', '15', '16',
                                            '17', '18', '19', '24', '25', '26', '27', '29', '30', '31',
@@ -44,7 +46,7 @@ def single_train():
                           test_user_list=['07', '12', '48'],
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
-                          dp_params=dp_params,
+                          dp_params=dp_params if Config.ADD_DP_NOISE else None,
                           log2wandb=Config.WRITE_TO_WANDB,
                           output_fn=logger.info)
 

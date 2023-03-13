@@ -9,20 +9,20 @@ from tqdm import tqdm
 # from common.config import Config
 from common.utils import labels_to_consecutive, calc_grad_norm
 from differential_privacy.params import DpParams
-from differential_privacy.utils import add_dp_noise
+from differential_privacy.utils import add_dp_noise, per_sample_gradient_fwd_bwd
 from train.params import TrainParams
 from train.train_objects import TrainObjects
+from collections.abc import Callable
 
 
-def run_single_epoch_return_grads(train_objects: TrainObjects,
-                                  batch_size: int) -> (float, float):
-    device = next(train_objects.model.parameters()).device
-
-    assert train_objects.model.training, 'Model not in train mode'
+def run_single_epoch_keep_grads(train_objects: TrainObjects,
+                                batch_size: int) -> (float, float):
+    model, loader, criterion, optimizer = astuple(train_objects)
+    assert model.training, 'Model not in train mode'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
-
+    device = next(model.parameters()).device
     y_pred, y_labels = [], []
-    for k, batch in enumerate(train_objects.loader):
+    for k, batch in enumerate(loader):
         curr_batch_size = batch[1].size(0)
         if curr_batch_size < batch_size:
             continue
@@ -33,12 +33,12 @@ def run_single_epoch_return_grads(train_objects: TrainObjects,
         emg, labels = batch
         labels = labels_to_consecutive(labels).squeeze()
 
-        outputs = train_objects.model(emg.float())
+        outputs = model(emg.float())
 
-        loss = train_objects.criterion(outputs, labels.long())
+        loss = criterion(outputs, labels.long())
         running_loss += float(loss)
         _, predicted = torch.max(outputs.data, 1)
-        if train_objects.model.training:
+        if model.training:
             loss.backward()
 
         correct = (predicted == labels).sum().item()
@@ -51,17 +51,40 @@ def run_single_epoch_return_grads(train_objects: TrainObjects,
     return loss, acc
 
 
+def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now):
+    model, loader, criterion, optimizer = astuple(train_objects)
+    if model.training and zero_grad_now:
+        # optimizer.zero_grad() done
+        # at first batch or if optimizer.step() done at previous batch
+        optimizer.zero_grad()
+
+    outputs = model(inputs.float())
+    loss = criterion(outputs, labels.long())
+    _, predicted = torch.max(outputs.data, 1)
+    if model.training:
+        loss.backward()
+        if grad_step_now:
+            if dp_params is not None:
+                add_dp_noise(model, params=dp_params)
+            optimizer.step()
+    return predicted, float(loss)
+
+
 def run_single_epoch(train_objects: TrainObjects,
                      train_params: TrainParams,
-                     dp_params: DpParams = None) -> (float, float):
-    device = next(train_objects.model.parameters()).device
-    _, batch_size, descent_every, _, _, add_dp_noise_before_optimization = astuple(train_params)
-    assert not train_objects.model.training or train_objects.optimizer is not None, \
-        'None Optimizer  given at train epoch'
-    running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
+                     dp_params: DpParams = None,
+                     fwd_bwd_fn: Callable[[torch.Tensor, torch.Tensor, TrainObjects, DpParams, bool, bool], (torch.Tensor, int)] = dp_sgd_fwd_bwd)\
+        -> (float, float):
+    _, batch_size, descent_every, _, _ = astuple(train_params)
+    model, loader, criterion, optimizer = astuple(train_objects)
 
+    assert not model.training or optimizer is not None, 'None Optimizer  given at train epoch'
+    running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
+    device = next(model.parameters()).device
     y_pred, y_labels = [], []
-    for k, batch in enumerate(train_objects.loader):
+    zero_grad_now = True
+
+    for k, batch in enumerate(loader):
         curr_batch_size = batch[1].size(0)
         if curr_batch_size < batch_size:
             continue
@@ -69,28 +92,16 @@ def run_single_epoch(train_objects: TrainObjects,
 
         sample_counter += curr_batch_size
         batch = (t.to(device) for t in batch)
-        emg, labels = batch
+        inputs, labels = batch
         labels = labels_to_consecutive(labels).squeeze()
 
-        if train_objects.model.training and \
-                (descent_every == 1 or
-                 (descent_every > 1 and ((k + 1) % descent_every) == 1)):
-            # optimizer.zero_grad() done
-            # at first batch or if optimizer.step() done at previous batch
+        grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
-            train_objects.optimizer.zero_grad()
+        predicted, loss = fwd_bwd_fn(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now)
+        zero_grad_now = not grad_step_now
 
-        outputs = train_objects.model(emg.float())
+        running_loss += loss
 
-        loss = train_objects.criterion(outputs, labels.long()) / descent_every
-        running_loss += float(loss)
-        _, predicted = torch.max(outputs.data, 1)
-        if train_objects.model.training:
-            loss.backward()
-            if descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0:
-                if add_dp_noise_before_optimization:
-                    add_dp_noise(train_objects.model, params=dp_params)
-                train_objects.optimizer.step()
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
 
@@ -102,20 +113,21 @@ def run_single_epoch(train_objects: TrainObjects,
 
 
 def train_model(train_objects: TrainObjects,
-                validation_loader,
-                test_loader,
+                val_objects: TrainObjects,
+                test_objects: TrainObjects,
                 train_params: TrainParams,
                 dp_params=None,
                 log2wandb: bool = True,
                 show_pbar: bool = True,
                 output_fn=lambda s: None):
-    num_epochs, _, _, validation_eval_every, test_eval_at_end, add_dp_noise_before_optimization = astuple(train_params)
+    num_epochs, _, _, validation_eval_every, test_eval_at_end = astuple(train_params)
     eval_params = TrainParams(epochs=1, batch_size=train_params.batch_size)
     train_loss, train_acc, validation_loss, validation_acc = 0, 0, 0, 0
     eval_num = 0
     range_epochs = range(1, num_epochs + 1)
     epoch_pbar = tqdm(range_epochs) if show_pbar else None
-    train_objects.model.train()
+    model = train_objects.model
+    model.train()
     for epoch in (epoch_pbar if show_pbar else range_epochs):
 
         epoch_train_loss, epoch_train_acc = \
@@ -124,11 +136,11 @@ def train_model(train_objects: TrainObjects,
                              dp_params=dp_params)
 
         if validation_eval_every == 1 or (validation_eval_every > 1 and epoch % (validation_eval_every - 1)) == 0:
-            train_objects.model.eval()
+            model.eval()
             epoch_validation_loss, epoch_validation_acc = \
-                run_single_epoch(train_objects=TrainObjects(loader=validation_loader, model=train_objects.model),
+                run_single_epoch(train_objects=val_objects,
                                  train_params=eval_params)
-            train_objects.model.train()
+            model.train()
             eval_num += 1
             validation_loss += epoch_validation_loss
             validation_acc += epoch_validation_acc
@@ -153,9 +165,9 @@ def train_model(train_objects: TrainObjects,
                        'validation_acc': validation_acc / eval_num
                        })
     if test_eval_at_end:
-        train_objects.model.eval()
+        model.eval()
         test_loss, test_acc = run_single_epoch(
-            train_objects=TrainObjects(loader=test_loader, model=train_objects.model),
+            train_objects=test_objects,
             train_params=eval_params)
         output_fn(f'Test Loss {test_loss} Test Acc {test_acc}')
         if log2wandb:

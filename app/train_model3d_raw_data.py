@@ -10,6 +10,7 @@ from train.params import TrainParams
 from train.train_objects import TrainObjects
 from train.train_utils import train_model
 from common.config import Config
+from torch.nn import CrossEntropyLoss
 
 
 def main():
@@ -28,7 +29,7 @@ def main():
     model = Model3d(number_of_classes=Config.NUM_CLASSES,
                     window_size=Config.WINDOW_SIZE,
                     use_dropout=Config.USE_DROPOUT,
-                    use_group_norm=Config.USE_BATCHNORM,
+                    use_group_norm=Config.USE_GROUPNORM,
                     output_info_fn=logger.info,
                     output_debug_fn=logger.debug)
     model.to(Config.DEVICE)
@@ -36,15 +37,29 @@ def main():
                                 lr=Config.LEARNING_RATE,
                                 weight_decay=Config.WEIGHT_DECAY,
                                 momentum=Config.MOMENTUM)
-    train_objects = TrainObjects(model=model, loader=train_loader, optimizer=optimizer)
+
+    normalized_criterion = lambda outs_arg, labels_arg: CrossEntropyLoss()(outs_arg,
+                                                                           labels_arg) / Config.LOT_SIZE_IN_BATCHES
+
+    train_objects = TrainObjects(model=model,
+                                 loader=train_loader,
+                                 optimizer=optimizer,
+                                 criterion=normalized_criterion)
+
+    val_objects = TrainObjects(model=model, loader=validation_loader, criterion=CrossEntropyLoss())
+
+    test_objects = TrainObjects(model=model, loader=test_loader, criterion=CrossEntropyLoss())
+
     train_params = TrainParams(epochs=Config.NUM_EPOCHS, batch_size=Config.BATCH_SIZE,
                                descent_every=Config.LOT_SIZE_IN_BATCHES, validation_every=Config.EVAL_EVERY,
-                               test_at_end=Config.TEST_AT_END, add_dp_noise=Config.ADD_DP_NOISE)
+                               test_at_end=Config.TEST_AT_END)
+
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE,
                          dp_sigma=Config.DP_SIGMA, dp_C=Config.DP_C)
+
     train_model(train_objects=train_objects,
-                validation_loader=validation_loader,
-                test_loader=test_loader,
+                val_objects=val_objects,
+                test_objects=test_objects,
                 train_params=train_params,
                 dp_params=dp_params,
                 log2wandb=Config.WRITE_TO_WANDB,

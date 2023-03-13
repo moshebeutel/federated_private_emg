@@ -7,12 +7,14 @@ from common import utils
 from common.utils import get_users_list_from_dir, \
     get_traj_for_user, read_trial, read_every_mean_fn
 from common.utils import config_logger
+# import putemg_features
+# from putemg_features import biolab_utilities
 
-DATA_DIR = '../data/Data-HDF5'  # '../data/reduced_dataframes'
+
+DATA_DIR = '/home/user1/data/datasets/putEMG'  # '../data/reduced_dataframes'
 UNIFIED_DATA_DIR = '../data/unified_dataframes'
 READ_EVERY = 10
 NUM_USERS = len(utils.FULL_USER_LIST)
-
 
 def is_test(user, traj, is_first_trial):
     return (user, traj) in utils.TEST_SET and is_first_trial
