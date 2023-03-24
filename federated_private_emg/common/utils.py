@@ -236,3 +236,14 @@ def calc_grad_norm(model):
         # Sum grad squared norms
         grad_norm += pow(float(torch.linalg.vector_norm(p.grad)), 2.0)
     return sqrt(grad_norm)
+
+
+def flatten_tensor(tensor_list):
+    '''
+    Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
+    '''
+    for i in range(len(tensor_list)):
+        tensor_list[i] = tensor_list[i].reshape([tensor_list[i].shape[0], -1])
+    flatten_param = torch.cat(tensor_list, dim=1)
+    del tensor_list
+    return flatten_param

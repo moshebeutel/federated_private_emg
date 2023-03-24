@@ -4,16 +4,18 @@ from dataclasses import astuple
 
 import torch
 import wandb
+from backpack import backpack
+from backpack.extensions import BatchGrad
 from tqdm import tqdm
 
 # from common.config import Config
-from common.utils import labels_to_consecutive, calc_grad_norm
+from common.utils import labels_to_consecutive
 from differential_privacy.params import DpParams
 from differential_privacy.utils import add_dp_noise, per_sample_gradient_fwd_bwd
 from train.params import TrainParams
 from train.train_objects import TrainObjects
 from collections.abc import Callable
-
+from common.config import Config
 
 def run_single_epoch_keep_grads(train_objects: TrainObjects,
                                 batch_size: int) -> (float, float):
@@ -39,7 +41,11 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
         running_loss += float(loss)
         _, predicted = torch.max(outputs.data, 1)
         if model.training:
-            loss.backward()
+            if Config.USE_GEP:
+                with backpack(BatchGrad()):
+                    loss.backward()
+            else:
+                loss.backward()
 
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)

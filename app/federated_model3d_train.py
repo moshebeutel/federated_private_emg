@@ -1,12 +1,17 @@
 import logging
 import os
+
+import torch.nn
+
 import wandb
 from common import utils
 from differential_privacy.params import DpParams
+from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, FlattenToLinear, PadBeforeLast, Squeeze
 from federated_private_emg.fed_priv_models.model3d import Model3d
-from train.federated_utils import federated_train_model
+from train.federated_utils import federated_train_model, attach_gep, create_public_dataset
 from train.params import TrainParams
 from common.config import Config
+from functools import *
 
 
 def main():
@@ -26,27 +31,92 @@ def single_train():
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
-    model = Model3d(number_of_classes=Config.NUM_CLASSES,
-                    window_size=Config.WINDOW_SIZE,
-                    use_group_norm=True,
-                    output_info_fn=logger.info,
-                    output_debug_fn=logger.debug)
+
+    # model = Model3d(number_of_classes=Config.NUM_CLASSES,
+    #                 window_size=Config.WINDOW_SIZE,
+    #                 use_group_norm=True,
+    #                 output_info_fn=logger.info,
+    #                 output_debug_fn=logger.debug)
+
+    model = torch.nn.Sequential(torch.nn.Sequential(
+
+        Reshape3Bands(window_size=Config.WINDOW_SIZE, W=3, H=8),
+        PadBeforeLast(),
+        PadLastDimCircular(window_size=Config.WINDOW_SIZE, W=3),
+
+        # Conv3DBlock
+        torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
+        torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
+        Squeeze(),
+        # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
+        torch.nn.ReLU(inplace=False),
+
+        # Conv2DBlock
+        torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
+        torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
+        Squeeze(),
+        # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
+        torch.nn.ReLU(inplace=False),
+
+        # Conv1DBlock
+        torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
+        torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
+        # torch.nn.GroupNorm(4, 126, eps=1e-05, affine=True),
+        torch.nn.ReLU(inplace=False),
+
+        # Conv1DBlock
+        torch.nn.Conv1d(128, 256, kernel_size=(3,), stride=(2,)),
+        torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
+        # torch.nn.GroupNorm(4, 126, eps=1e-05, affine=True),
+        torch.nn.ReLU(inplace=False),
+
+        # FlattenToLinear(),
+        torch.nn.Flatten(start_dim=1, end_dim=-1),
+        # DenseBlock
+        torch.nn.Linear(in_features=256, out_features=256, bias=True),
+        torch.nn.ReLU(inplace=False),
+
+        # DenseBlock
+        torch.nn.Linear(in_features=256, out_features=128, bias=True),
+        torch.nn.ReLU(inplace=False),
+
+        # DenseBlock
+        torch.nn.Linear(in_features=128, out_features=64, bias=True),
+        torch.nn.ReLU(inplace=False),
+
+        # output layer
+        torch.nn.Linear(in_features=64, out_features=7, bias=True)
+    ))
+
     model.to(Config.DEVICE)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    if Config.USE_GEP:
+        public_inputs, public_targets = create_public_dataset('04')
+
+        attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
+                                      batch_size=Config.BATCH_SIZE, clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
+                                      power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
+                                      public_inputs=public_inputs, public_targets=public_targets)
+
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
                          dp_C=Config.DP_C)
-    internal_train_params = TrainParams(epochs=Config.NUM_INTERNAL_EPOCHS, batch_size=Config.BATCH_SIZE,
-                                        descent_every=Config.LOT_SIZE_IN_BATCHES, validation_every=Config.EVAL_EVERY,
+
+    internal_train_params = TrainParams(epochs=Config.NUM_INTERNAL_EPOCHS,
+                                        batch_size=Config.BATCH_SIZE,
+                                        descent_every=Config.LOT_SIZE_IN_BATCHES,
+                                        validation_every=Config.EVAL_EVERY,
                                         test_at_end=False)
-    federated_train_model(model=model,
+
+    federated_train_model(model=model, loss_fn=loss_fn,
                           train_user_list=['03', '05', '06', '08', '09', '11', '13', '14', '15', '16',
                                            '17', '18', '19', '24', '25', '26', '27', '29', '30', '31',
                                            '33', '34', '35', '36', '38', '39', '42', '43', '45', '46'],
-
                           validation_user_list=['22', '23', '47'],
                           test_user_list=['07', '12', '48'],
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
                           dp_params=dp_params if Config.ADD_DP_NOISE else None,
+                          attach_gep_to_model_fn=None if not Config.USE_GEP else attach_gep_to_model,
                           log2wandb=Config.WRITE_TO_WANDB,
                           output_fn=logger.info)
 
