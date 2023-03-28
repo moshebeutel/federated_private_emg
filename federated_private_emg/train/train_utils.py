@@ -9,16 +9,18 @@ from backpack.extensions import BatchGrad
 from tqdm import tqdm
 
 # from common.config import Config
-from common.utils import labels_to_consecutive
+from common.utils import labels_to_consecutive, flatten_tensor
 from differential_privacy.params import DpParams
 from differential_privacy.utils import add_dp_noise, per_sample_gradient_fwd_bwd
+from fed_priv_models.gep import GEP
 from train.params import TrainParams
 from train.train_objects import TrainObjects
 from collections.abc import Callable
 from common.config import Config
 
+
 def run_single_epoch_keep_grads(train_objects: TrainObjects,
-                                batch_size: int) -> (float, float):
+                                batch_size: int, gep: GEP = None) -> (float, float):
     model, loader, criterion, optimizer = astuple(train_objects)
     assert model.training, 'Model not in train mode'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
@@ -46,6 +48,30 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
                     loss.backward()
             else:
                 loss.backward()
+        if Config.USE_GEP:
+            assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
+            batch_grad_list = []
+            for p in model.parameters():
+                batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
+                del p.grad_batch
+            clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
+            theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
+                                       size=clipped_theta.shape,
+                                       device=clipped_theta.device)
+            grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
+                                      size=residual_grad.shape,
+                                      device=residual_grad.device)
+            clipped_theta += theta_noise
+            residual_grad += grad_noise
+
+            noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+
+            offset = 0
+            for p in model.parameters():
+                shape = p.grad.shape
+                numel = p.grad.numel()
+                p.grad.data = noisy_grad[offset:offset + numel].view(shape)
+                offset += numel
 
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
@@ -79,7 +105,8 @@ def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad
 def run_single_epoch(train_objects: TrainObjects,
                      train_params: TrainParams,
                      dp_params: DpParams = None,
-                     fwd_bwd_fn: Callable[[torch.Tensor, torch.Tensor, TrainObjects, DpParams, bool, bool], (torch.Tensor, int)] = dp_sgd_fwd_bwd)\
+                     fwd_bwd_fn: Callable[[torch.Tensor, torch.Tensor, TrainObjects, DpParams, bool, bool], (
+                     torch.Tensor, int)] = dp_sgd_fwd_bwd) \
         -> (float, float):
     _, batch_size, descent_every, _, _ = astuple(train_params)
     model, loader, criterion, optimizer = astuple(train_objects)
