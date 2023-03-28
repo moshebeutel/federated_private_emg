@@ -117,28 +117,28 @@ class GEP(nn.Module):
             return torch.cat(grad_list)
 
     def get_anchor_gradients(self, net, loss_func):
-        print('get_anchor_gradient')
+        # print('get_anchor_gradient')
         public_inputs, public_targets = self.public_inputs, self.public_targets
 
         outputs = net(self.public_inputs)
 
         loss = loss_func(outputs.cpu(), self.public_targets.cpu())
         with backpack(BatchGrad()):
-            print('before loss.backward()')
+            # print('get_anchor_gradients. before loss.backward()')
             loss.backward()
         cur_batch_grad_list = []
         for p in net.parameters():
-            print('p.grad_batch.shape', p.grad_batch.shape)
+            # print('get_anchor_gradients. p.grad_batch.shape', p.grad_batch.shape)
             cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
             del p.grad_batch
         return flatten_tensor(cur_batch_grad_list)
 
     def get_anchor_space(self, net, loss_func, logging=False):
-        print('get_anchor_space')
+        # print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
         # if self.selected_bases_list \
         # else torch.ones((self.batch_size, self.num_params))
-        print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
+        # print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
         with torch.no_grad():
             num_param_list = self.num_param_list
             num_anchor_grads = anchor_grads.shape[0]
@@ -157,7 +157,7 @@ class GEP(nn.Module):
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
                 pub_grad = anchor_grads[:, offset:offset + num_param]
-                print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
+                # print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
                 offset += num_param
 
                 num_bases = num_bases_list[i]
@@ -169,16 +169,16 @@ class GEP(nn.Module):
                 selected_bases_list.append(selected_bases.to(device))
 
             self.selected_bases_list = selected_bases_list
-            print(f'selected bases list len {len(self.selected_bases_list)}')
+            # print(f'selected bases list len {len(self.selected_bases_list)}')
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
         del anchor_grads
 
     def forward(self, target_grad, logging=False):
-        print('gep forward')
-        if 'selected_bases_list' not in self.__dict__.keys():
-            print('selected_bases_list not in dict. return')
-            return target_grad
+        # print('gep forward')
+        # if 'selected_bases_list' not in self.__dict__.keys():
+        #     print('selected_bases_list not in dict. return')
+        #     return target_grad
 
         with torch.no_grad():
             num_param_list = self.num_param_list
@@ -188,17 +188,17 @@ class GEP(nn.Module):
             if logging:
                 print('group wise approx error')
 
-            target_grad = flatten_tensor(
-                [net_param.grad_batch.reshape(net_param.grad_batch.shape[0], -1) for net_param in
-                 self.net_wrapper.net.parameters()])
-            print('target_grad.shape', target_grad.shape)
+            # target_grad = flatten_tensor(
+            #     [net_param.grad_batch.reshape(net_param.grad_batch.shape[0], -1) for net_param in
+            #      self.net_wrapper.net.parameters()])
+            # print('target_grad.shape', target_grad.shape)
 
             for i, num_param in enumerate(num_param_list):
                 grad = target_grad[:, offset:offset + num_param]
-                print(f'i = {i}, num_param = {num_param}. grad.shape {grad.shape}')
-                print(f'selected bases list len {len(self.selected_bases_list)}')
+                # print(f'i = {i}, num_param = {num_param}. grad.shape {grad.shape}')
+                # print(f'selected bases list len {len(self.selected_bases_list)}')
                 selected_bases = self.selected_bases_list[i]
-                print(selected_bases.shape)
+                # print(selected_bases.shape)
                 embedding = torch.matmul(grad, selected_bases)
                 num_bases = self.num_bases_list[i]
                 if logging:
