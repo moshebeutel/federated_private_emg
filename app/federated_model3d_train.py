@@ -91,7 +91,7 @@ def single_train():
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss()
     if Config.USE_GEP:
-        public_inputs, public_targets = create_public_dataset('04')
+        public_inputs, public_targets = create_public_dataset(['04', '13', '35'])
 
         attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
                                       batch_size=Config.BATCH_SIZE, clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
@@ -108,9 +108,9 @@ def single_train():
                                         test_at_end=False)
 
     federated_train_model(model=model, loss_fn=loss_fn,
-                          train_user_list=['03', '05', '06', '08', '09', '11', '13', '14', '15', '16',
+                          train_user_list=['03', '05', '06', '08', '09', '11', '14', '15', '16',
                                            '17', '18', '19', '24', '25', '26', '27', '29', '30', '31',
-                                           '33', '34', '35', '36', '38', '39', '42', '43', '45', '46'],
+                                           '33', '34', '36', '38', '39', '42', '43', '45', '46'],
                           validation_user_list=['22', '23', '47'],
                           test_user_list=['07', '12', '48'],
                           internal_train_params=internal_train_params,

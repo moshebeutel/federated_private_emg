@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import errno
 import logging
 import os
+import re
 import sys
 import time
+import typing
 from datetime import datetime
 from math import sqrt, pow
+
 import numpy as np
 import pandas as pd
-import re
-import errno
-
 import torch
-import typing
 
 from common.config import Config
 
@@ -173,10 +173,14 @@ def get_exp_name(module_name: str):
 
 
 def load_datasets(datasets_folder_name, x_filename, y_filename):
-    X = torch.load(os.path.join(datasets_folder_name, x_filename))
-
-    y = torch.load(os.path.join(datasets_folder_name, y_filename))
-
+    if isinstance(datasets_folder_name, str):
+        datasets_folder_name = [datasets_folder_name]
+    X_list, y_list = [], []
+    for folder_name in datasets_folder_name:
+        X_list.append(torch.load(os.path.join(folder_name, x_filename)))
+        y_list.append(torch.load(os.path.join(folder_name, y_filename)).unsqueeze(dim=-1))
+    X = torch.vstack(X_list)
+    y = torch.vstack(y_list).squeeze()
     return X, y
 
 
@@ -210,7 +214,7 @@ def init_data_loaders(datasets_folder_name,
         output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
         loader = torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(X, y),
-            shuffle=True,
+            shuffle=True if dataset == 'train' else False,
             batch_size=batch_size,
             num_workers=num_workers
         )
