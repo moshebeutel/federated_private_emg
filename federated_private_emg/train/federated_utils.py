@@ -1,5 +1,6 @@
 import copy
 import os
+from collections import OrderedDict
 
 import torch
 import wandb
@@ -17,9 +18,10 @@ import torch
 from collections.abc import Callable
 
 
-def create_public_dataset(public_user: str or list[str]):
-    user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_user) if isinstance(public_user, str) else\
-        [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_user]
+def create_public_dataset(public_users: str or list[str]):
+    user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
+                                                                                                  str) else \
+        [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
     public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['validation'])
     # public_data = list(public_loader)
     #
@@ -44,8 +46,11 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
 
     # print(net.__dict__)
     # print(net._forward_hooks)
-    # print('Before Extend', net)
+    # print('*** Before Extend  ***')
+    # print(net.__dict__)
     net = extend(net)
+    # print('*** After Extend ***')
+    # print(net.__dict__)
     # print(net._forward_hooks)
     # print(net.__dict__)
     # for name,child in net.named_children():
@@ -96,8 +101,13 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
     num_clients = len(train_user_list)
     optimizer = torch.optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
                                 momentum=0.9)
-    pbar = tqdm(enumerate(train_user_list), desc='Iteration loop', leave=False)
-    for i, u in pbar:
+    model.train()
+    params = OrderedDict()
+    for n, p in model.named_parameters():
+        params[n] = torch.zeros_like(p.data)
+    # pbar = tqdm(enumerate(train_user_list), desc='Iteration loop')
+    # for i, u in pbar:
+    for i, u in enumerate(train_user_list):
         # u = train_user_list[i]
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
         test_loader, validation_loader, train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
@@ -105,71 +115,96 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
         local_model = copy.deepcopy(model)
         device = next(model.parameters()).device
         local_model = local_model.to(device)
-        assert Config.USE_GEP == (attach_gep_to_model_fn is not None), f'USE_GEP = {Config.USE_GEP} but ' \
-                                                                       f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
+
+        assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
+            f'USE_GEP = {Config.USE_GEP} but ' \
+            f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
         if Config.USE_GEP:
             local_model, loss_fn, gep = attach_gep_to_model_fn(local_model)
+            # print('*** After attach gep  ***')
+            # print(local_model.__dict__)
+            # raise Exception
+        local_optimizer = torch.optim.SGD(local_model.parameters(), lr=Config.LEARNING_RATE,
+                                          weight_decay=Config.WEIGHT_DECAY, momentum=0.9)
         local_model.train()
-
-        # model.train()
+        # local_optimizer.zero_grad()
         if i % Config.NUM_CLIENT_AGG == 0:
             optimizer.zero_grad()
             if Config.USE_GEP:
+                local_optimizer.zero_grad()
+                for p in local_model.parameters():
+                    p.grad = torch.zeros_like(p)
                 gep.get_anchor_space(local_model, loss_func=loss_fn)
             for p in model.parameters():
                 p.grad = torch.zeros_like(p)
+        # local_optimizer.zero_grad()
         for p in local_model.parameters():
             p.grad = torch.zeros_like(p)
         train_objects = TrainObjects(model=local_model, loader=train_loader, criterion=loss_fn)
         user_loss, user_acc = 0.0, 0.0
-        # internal train
+
+        # Internal train
+        # p_inner_bar = tqdm(range(Config.NUM_INTERNAL_EPOCHS), desc='Internal loop', leave=False)
+        # for _ in p_inner_bar:
         for _ in range(Config.NUM_INTERNAL_EPOCHS):
+
+            local_optimizer.zero_grad()
+            # print('after zero grad')
+            # for p in local_model.parameters():
+            #     print(p.grad.abs().max())
+            # for p in train_objects.model.parameters():
+            #     print(p.grad.abs().max())
+
             loss, acc = \
                 run_single_epoch_keep_grads(train_objects=train_objects, batch_size=train_params.batch_size,
                                             gep=gep if Config.USE_GEP else None)
+            # print('after run_single_epoch_keep_grads')
+            for ret_p, lp in zip(train_objects.model.parameters(), local_model.parameters()):
+                # print(ret_p.grad.abs().max())
+                lp.grad = ret_p.grad
+
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
             user_acc += acc / Config.NUM_INTERNAL_EPOCHS
+
+            # backup_model = copy.deepcopy(local_model)
+            # print('before local_optimizer.step()')
+            # for p,bp in zip(local_model.parameters(), backup_model.parameters()):
+            #     diff = p.data - bp.data
+            #     print(diff.abs().max())
+            local_optimizer.step()
+            # print('after local_optimizer.step()')
+            # for p, bp in zip(local_model.parameters(), backup_model.parameters()):
+            #     diff = p.data - bp.data
+            #     print(diff.abs().max())
+
+            train_objects = TrainObjects(model=local_model, loader=train_loader, criterion=loss_fn)
+
+            # p_inner_bar.set_description(f'Inner iteration user_loss {loss}  user_acc {acc}')
+            # print(f'Inner iteration user_loss {user_loss}  user_acc {user_acc}')
 
         epoch_train_loss += user_loss / num_clients
         epoch_train_acc += user_acc / num_clients
 
+        for n, p in local_model.named_parameters():
+            # print(p.grad.abs().max())
+            params[n] += (p.data / num_clients)
+
         # dp
         if Config.USE_GEP:
-            for p, p_local in zip(model.parameters(), local_model.parameters()):
-                # Clip gradients and sum on global model
-                p.grad += p_local.grad
-
-            # batch_grad_list = []
-            # for p in model.parameters():
-            #     batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-            #     del p.grad_batch
-            # clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
-            # theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
-            #                            size=clipped_theta.shape,
-            #                            device=clipped_theta.device)
-            # grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
-            #                           size=residual_grad.shape,
-            #                           device=residual_grad.device)
-            # clipped_theta += theta_noise
-            # residual_grad += grad_noise
-            #
-            # noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
-            #
-            # offset = 0
-            # for p in model.parameters():
-            #     shape = p.grad.shape
-            #     numel = p.grad.numel()
-            #     p.grad.data = noisy_grad[offset:offset + numel].view(shape)
-            #     offset += numel
-
+            pass
+            # for p, p_local in zip(model.parameters(), train_objects.model.parameters()):
+            #     # Clip gradients and sum on global model
+            #     # print(p_local.grad.abs().max())
+            #     p.grad += p_local.grad
         else:
-            grad_norm = calc_grad_norm(local_model)
-            for p, p_local in zip(model.parameters(), local_model.parameters()):
-                # Clip gradients and sum on global model
-                p.grad += (p_local.grad / max(1, grad_norm / dp_params.dp_C))
-                # Add DP noise to gradients
-                noise = torch.normal(mean=0, std=dp_params.dp_sigma * dp_params.dp_C, size=p.size(), device=p.device)
-                p.grad += noise
+            pass
+            # grad_norm = calc_grad_norm(local_model)
+            # for p, p_local in zip(model.parameters(), local_model.parameters()):
+            #     # Clip gradients and sum on global model
+            #     p.grad += (p_local.grad / max(1, grad_norm / dp_params.dp_C))
+            #     # Add DP noise to gradients
+            #     noise = torch.normal(mean=0, std=dp_params.dp_sigma * dp_params.dp_C, size=p.size(), device=p.device)
+            #     p.grad += noise
 
         del local_model
 
@@ -177,12 +212,16 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
             for p in model.parameters():
                 # average grads
                 p.grad /= Config.NUM_CLIENT_AGG
-            # update parameters backwards
-            optimizer.step()
-        pbar.set_description(f"Iteration {i}. User {u}. Epoch running loss {epoch_train_loss}."
-                             f" Epoch running acc {epoch_train_acc}")
-        # user_pbar.set_description(f'user train {u} loss {train_loss}'
-        #                           f' acc {train_acc} test loss {test_loss} test acc {test_acc}')
+
+        # pbar.set_description(f"Iteration {i}. User {u}. Epoch running loss {epoch_train_loss}."
+        #                      f" Epoch running acc {epoch_train_acc}")
+    # for n, p in model.named_parameters():
+    #     # print(p.grad.shape, p.grad.max(), p.grad.min(), p.grad.mean())
+    #     diff = params[n] - p
+    #     print(diff.min(), diff.max(), diff.mean())
+    # model.load_state_dict(params)
+    # # update parameters backwards
+    # optimizer.step()
 
     # average parameters
     # for n, p in params.items():
@@ -191,7 +230,9 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
 
     # update new parameters
     # model.load_state_dict(params)
-    return epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc
+    # average parameters
+
+    return epoch_train_loss, epoch_train_acc, params
 
 
 def federated_train_model(model, loss_fn, train_user_list, validation_user_list, test_user_list, num_epochs,
@@ -199,13 +240,23 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                           log2wandb=False,
                           output_fn=lambda s: None):
     eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
-    epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
-    for epoch in epoch_pbar:
-        epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = \
+    # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
+    for epoch in range(num_epochs):
+        # backup_model = copy.deepcopy(model)
+        epoch_train_loss, epoch_train_acc, params = \
             federated_train_single_epoch(model=model, loss_fn=loss_fn,
                                          train_user_list=train_user_list,
                                          train_params=internal_train_params,
                                          dp_params=dp_params, attach_gep_to_model_fn=attach_gep_to_model_fn)
+
+        # for p, bp, rp in zip(model.parameters(), backup_model.parameters(), ret_model.parameters()):
+        #     # print(p.grad.shape, p.grad.max(), p.grad.min(), p.grad.mean())
+        #     print((p - bp).abs().max())
+        #     print((p - rp).abs().max())
+
+        # print(params)
+        model.load_state_dict(params)
+
         model.eval()
         val_loss, val_acc = 0, 0
         for u in validation_user_list:
@@ -216,17 +267,17 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             val_loss += loss / len(validation_user_list)
             val_acc += acc / len(validation_user_list)
 
-        epoch_pbar.set_description(f'federated global epoch {epoch} '
-                                   f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
-                                   f'test_loss {epoch_test_loss},  test_acc {epoch_test_acc} '
-                                   f'val set loss {val_loss} val set acc {val_acc}')
+        # epoch_pbar.set_description(f'federated global epoch {epoch} '
+        #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
+        #                            f'val set loss {val_loss} val set acc {val_acc}')
+        print(f'federated global epoch {epoch} '
+              f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
+              f'val set loss {val_loss} val set acc {val_acc}')
 
         if log2wandb:
             wandb.log({
                 'epoch_train_loss': epoch_train_loss,
                 'epoch_train_acc': epoch_train_acc,
-                'epoch_test_loss': epoch_test_loss,
-                'epoch_test_acc': epoch_test_acc,
                 'epoch_validation_loss': val_loss,
                 'epoch_validation_acc': val_acc,
             })

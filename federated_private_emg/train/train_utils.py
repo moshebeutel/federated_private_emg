@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import astuple
 
 import torch
@@ -20,12 +21,16 @@ from common.config import Config
 
 
 def run_single_epoch_keep_grads(train_objects: TrainObjects,
-                                batch_size: int, gep: GEP = None) -> (float, float):
+                                batch_size: int, gep: GEP = None, use_dp_noise: bool = False) -> (float, float):
     model, loader, criterion, optimizer = astuple(train_objects)
     assert model.training, 'Model not in train mode'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
     device = next(model.parameters()).device
     y_pred, y_labels = [], []
+
+    # p_grads = OrderedDict()
+    # for n, p in model.named_parameters():
+    #     p_grads[n] = torch.zeros_like(p.data)
     for k, batch in enumerate(loader):
         curr_batch_size = batch[1].size(0)
         if curr_batch_size < batch_size:
@@ -42,7 +47,9 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
         loss = criterion(outputs, labels.long())
         running_loss += float(loss)
         _, predicted = torch.max(outputs.data, 1)
+
         if model.training:
+            # optimizer.zero_grad()
             if Config.USE_GEP:
                 with backpack(BatchGrad()):
                     loss.backward()
@@ -52,34 +59,51 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
             assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
             batch_grad_list = []
             for p in model.parameters():
-                batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-                del p.grad_batch
+                if hasattr(p, 'grad_batch'):
+                    batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
+                    del p.grad_batch
             clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
-            theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
-                                       size=clipped_theta.shape,
-                                       device=clipped_theta.device)
-            grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
-                                      size=residual_grad.shape,
-                                      device=residual_grad.device)
-            clipped_theta += theta_noise
-            residual_grad += grad_noise
 
+            if use_dp_noise:
+                # Perturbation
+                theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
+                                           size=clipped_theta.shape,
+                                           device=clipped_theta.device)
+                grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
+                                          size=residual_grad.shape,
+                                          device=residual_grad.device)
+
+                print('theta_noise', torch.linalg.norm(theta_noise))
+                print('grad_noise', torch.linalg.norm(grad_noise))
+                clipped_theta += theta_noise
+                residual_grad += grad_noise
+
+            # print('target_grad', torch.linalg.norm(target_grad))
+            # print('clipped_theta', torch.linalg.norm(clipped_theta))
+            # print('residual_grad', torch.linalg.norm(residual_grad))
             noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
 
             offset = 0
-            for p in model.parameters():
+            for n, p in model.named_parameters():
                 shape = p.grad.shape
                 numel = p.grad.numel()
                 p.grad.data = noisy_grad[offset:offset + numel].view(shape)
+                # p_grads[n] += noisy_grad[offset:offset + numel].view(shape)
                 offset += numel
+
+        # optimizer.step()
 
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
-
         y_pred += predicted.cpu().tolist()
         y_labels += labels.cpu().tolist()
+    # if Config.USE_GEP:
+    #     for n, p in model.named_parameters():
+    #         p.grad.data = p_grads[n]
+
     loss = running_loss / float(counter)
     acc = 100 * correct_counter / sample_counter
+    train_objects.model = model
     return loss, acc
 
 
@@ -106,7 +130,7 @@ def run_single_epoch(train_objects: TrainObjects,
                      train_params: TrainParams,
                      dp_params: DpParams = None,
                      fwd_bwd_fn: Callable[[torch.Tensor, torch.Tensor, TrainObjects, DpParams, bool, bool], (
-                     torch.Tensor, int)] = dp_sgd_fwd_bwd) \
+                             torch.Tensor, int)] = dp_sgd_fwd_bwd) \
         -> (float, float):
     _, batch_size, descent_every, _, _ = astuple(train_params)
     model, loader, criterion, optimizer = astuple(train_objects)

@@ -68,6 +68,12 @@ def labels_to_consecutive(labels):
     return labels
 
 
+def labels_from_consecutive(labels):
+    labels += 1
+    labels[labels > 3] += 2
+    return labels
+
+
 def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True, min_action=0):
     # read dataframe from file
     df = pd.read_hdf(data_file)
@@ -172,13 +178,15 @@ def get_exp_name(module_name: str):
     return exp_name
 
 
-def load_datasets(datasets_folder_name, x_filename, y_filename):
+def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
     if isinstance(datasets_folder_name, str):
         datasets_folder_name = [datasets_folder_name]
     X_list, y_list = [], []
     for folder_name in datasets_folder_name:
-        X_list.append(torch.load(os.path.join(folder_name, x_filename)))
-        y_list.append(torch.load(os.path.join(folder_name, y_filename)).unsqueeze(dim=-1))
+        labels = torch.load(os.path.join(folder_name, y_filename))
+        non_zero_indices = (labels != 0).nonzero(as_tuple=True)[0].long().tolist()
+        X_list.append(torch.load(os.path.join(folder_name, x_filename))[non_zero_indices])
+        y_list.append(labels[non_zero_indices].unsqueeze(dim=-1))
     X = torch.vstack(X_list)
     y = torch.vstack(y_list).squeeze()
     return X, y

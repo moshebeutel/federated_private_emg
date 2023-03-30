@@ -96,7 +96,7 @@ class GEP(nn.Module):
         bases_list, num_bases_list, num_param_list = self.selected_bases_list, self.num_bases_list, self.num_param_list
         grad_list = []
         offset = 0
-        if (len(embedding.shape) > 1):
+        if len(embedding.shape) > 1:
             bs = embedding.shape[0]
         else:
             bs = 1
@@ -118,10 +118,7 @@ class GEP(nn.Module):
 
     def get_anchor_gradients(self, net, loss_func):
         # print('get_anchor_gradient')
-        public_inputs, public_targets = self.public_inputs, self.public_targets
-
         outputs = net(self.public_inputs)
-
         loss = loss_func(outputs.cpu(), self.public_targets.cpu())
         with backpack(BatchGrad()):
             # print('get_anchor_gradients. before loss.backward()')
@@ -129,8 +126,9 @@ class GEP(nn.Module):
         cur_batch_grad_list = []
         for p in net.parameters():
             # print('get_anchor_gradients. p.grad_batch.shape', p.grad_batch.shape)
-            cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-            del p.grad_batch
+            if hasattr(p, 'grad_batch'):
+                cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
+                del p.grad_batch
         return flatten_tensor(cur_batch_grad_list)
 
     def get_anchor_space(self, net, loss_func, logging=False):
