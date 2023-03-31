@@ -15,13 +15,14 @@ from functools import *
 
 
 def main():
-    exp_name = utils.get_exp_name(os.path.basename(__file__)[:-3])
+    exp_name = utils.get_exp_name('SINGLE USER with group norm' + os.path.basename(__file__)[:-3])
     # logger = utils.config_logger(f'{exp_name}_logger',
     #                              level=logging.INFO, log_folder='../log/')
     # logger.info(exp_name)
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
-        wandb.config.update({'batch_size': Config.BATCH_SIZE, 'learning_rate': Config.LEARNING_RATE})
+        wandb.config.update({'batch_size': Config.BATCH_SIZE, 'learning_rate': Config.LEARNING_RATE,
+                             'num_internal_epochs': Config.NUM_INTERNAL_EPOCHS, 'GEP': Config.USE_GEP})
 
     single_train()
 
@@ -48,20 +49,20 @@ def single_train():
         torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
         torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
         Squeeze(),
-        # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
+        torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv2DBlock
         torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
         torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
         Squeeze(),
-        # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
+        torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv1DBlock
         torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
         torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-        # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
+        torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv1DBlock
@@ -92,7 +93,7 @@ def single_train():
     loss_fn = torch.nn.CrossEntropyLoss()
     if Config.USE_GEP:
         # public_users = ['04', '13', '35', '08', '15', '24', '30', '31', '39', '42', '43', '45', '46']
-        public_users = ['04', '13']
+        public_users = ['04']
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
         attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
@@ -117,8 +118,10 @@ def single_train():
                           #                  '04', '13', '35', '08', '15', '24', '30', '31', '39',
                           #                  '42', '43', '45', '46'
                           #                  ],
-                          train_user_list=['04', '13', '35'],
-                          validation_user_list=['22', '23', '47'],
+                          # train_user_list=['04', '13', '35'],
+                          train_user_list=['04'],
+                          # validation_user_list=['22', '23', '47'],
+                          validation_user_list=['04'],
                           test_user_list=['07', '12', '48'],
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,

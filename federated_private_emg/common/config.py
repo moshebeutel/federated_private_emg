@@ -14,7 +14,7 @@ class Config:
     NUM_EPOCHS = 1000
     NUM_WORKERS = 2
     OPTIMIZER_TYPE = 'sgd'
-    LEARNING_RATE = 0.1
+    LEARNING_RATE = 0.001
     WEIGHT_DECAY = 1e-3
     MOMENTUM = 0.9
     UNIFIED_DATA_DIR = '../data/unified_dataframes'
@@ -25,10 +25,10 @@ class Config:
     EVAL_EVERY = 1
     TEST_AT_END = True
     NUM_CLIENT_AGG = 1
-    NUM_INTERNAL_EPOCHS = 10
-    WRITE_TO_WANDB = False
+    NUM_INTERNAL_EPOCHS = 30
+    WRITE_TO_WANDB = True
     # DP
-    USE_GEP = True
+    USE_GEP = False
     ADD_DP_NOISE = False
     LOT_SIZE_IN_BATCHES = 5
     DP_C = 0.1

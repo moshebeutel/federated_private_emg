@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 from dataclasses import astuple
 
@@ -20,18 +21,22 @@ from collections.abc import Callable
 from common.config import Config
 
 
-def run_single_epoch_keep_grads(train_objects: TrainObjects,
+def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                                 batch_size: int, gep: GEP = None, use_dp_noise: bool = False) -> (float, float):
-    model, loader, criterion, optimizer = astuple(train_objects)
+    # _, loader, criterion, _ = astuple(train_objects)
+    # model, loader, criterion, optimizer = astuple(train_objects)
     assert model.training, 'Model not in train mode'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
     device = next(model.parameters()).device
-    y_pred, y_labels = [], []
+    # y_pred, y_labels = [], []
 
-    # p_grads = OrderedDict()
-    # for n, p in model.named_parameters():
-    #     p_grads[n] = torch.zeros_like(p.data)
+    # init grads accumulator
+    accumulated_grads = OrderedDict()
+    for n, p in model.named_parameters():
+        accumulated_grads[n] = torch.zeros_like(p.data)
+
     for k, batch in enumerate(loader):
+
         curr_batch_size = batch[1].size(0)
         if curr_batch_size < batch_size:
             continue
@@ -41,15 +46,14 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
         batch = (t.to(device) for t in batch)
         emg, labels = batch
         labels = labels_to_consecutive(labels).squeeze()
-
+        optimizer.zero_grad()
         outputs = model(emg.float())
 
         loss = criterion(outputs, labels.long())
         running_loss += float(loss)
         _, predicted = torch.max(outputs.data, 1)
-
+        # print('t', t, 'Loss', loss)
         if model.training:
-            # optimizer.zero_grad()
             if Config.USE_GEP:
                 with backpack(BatchGrad()):
                     loss.backward()
@@ -63,7 +67,7 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
                     batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
                     del p.grad_batch
             clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
-
+            clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
             if use_dp_noise:
                 # Perturbation
                 theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
@@ -87,24 +91,32 @@ def run_single_epoch_keep_grads(train_objects: TrainObjects,
             for n, p in model.named_parameters():
                 shape = p.grad.shape
                 numel = p.grad.numel()
-                p.grad.data = noisy_grad[offset:offset + numel].view(shape)
-                # p_grads[n] += noisy_grad[offset:offset + numel].view(shape)
+                p.grad.data = clean_grad[offset:offset + numel].view(shape)
+                accumulated_grads[n] += noisy_grad[offset:offset + numel].view(shape)
                 offset += numel
+            del clean_grad, noisy_grad
+        else:  # No GEP
+            for n, p in model.named_parameters():
+                accumulated_grads[n] += p.grad.data
 
-        # optimizer.step()
+
+        optimizer.step()
 
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
-        y_pred += predicted.cpu().tolist()
-        y_labels += labels.cpu().tolist()
+        # y_pred += predicted.cpu().tolist()
+        # y_labels += labels.cpu().tolist()
+        del loss, labels, emg, predicted, batch, outputs
+        torch.cuda.empty_cache()
     # if Config.USE_GEP:
     #     for n, p in model.named_parameters():
-    #         p.grad.data = p_grads[n]
+    #         p.grad.data = accumulated_grads[n]
 
-    loss = running_loss / float(counter)
-    acc = 100 * correct_counter / sample_counter
-    train_objects.model = model
-    return loss, acc
+    epoch_loss = running_loss / float(counter)
+    epoch_acc = 100 * correct_counter / sample_counter
+
+    # train_objects.model = model
+    return epoch_loss, epoch_acc, accumulated_grads, model, optimizer
 
 
 def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now):
