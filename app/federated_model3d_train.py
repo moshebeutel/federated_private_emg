@@ -38,56 +38,61 @@ def single_train():
     #                 use_group_norm=True,
     #                 output_info_fn=logger.info,
     #                 output_debug_fn=logger.debug)
-
-    model = torch.nn.Sequential(torch.nn.Sequential(
-
-        Reshape3Bands(window_size=Config.WINDOW_SIZE, W=3, H=8),
-        PadBeforeLast(),
-        PadLastDimCircular(window_size=Config.WINDOW_SIZE, W=3),
-
-        # Conv3DBlock
-        torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
-        torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
-        Squeeze(),
-        # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
-        torch.nn.ReLU(inplace=False),
-
-        # Conv2DBlock
-        torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
-        torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
-        Squeeze(),
-        # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
-        torch.nn.ReLU(inplace=False),
-
-        # Conv1DBlock
-        torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
-        torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-        # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
-        torch.nn.ReLU(inplace=False),
-
-        # Conv1DBlock
-        torch.nn.Conv1d(128, 256, kernel_size=(3,), stride=(2,)),
-        torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-        # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
-        torch.nn.ReLU(inplace=False),
-
-        # FlattenToLinear(),
+    if Config.TOY_STORY:
+        model = torch.nn.linear.Sequential(
         torch.nn.Flatten(start_dim=1, end_dim=-1),
         # DenseBlock
-        torch.nn.Linear(in_features=256, out_features=256, bias=True),
-        torch.nn.ReLU(inplace=False),
+        torch.nn.Linear(in_features=2, out_features=1, bias=True))
+    else:
+        model = torch.nn.Sequential(torch.nn.Sequential(
 
-        # DenseBlock
-        torch.nn.Linear(in_features=256, out_features=128, bias=True),
-        torch.nn.ReLU(inplace=False),
+            Reshape3Bands(window_size=Config.WINDOW_SIZE, W=3, H=8),
+            PadBeforeLast(),
+            PadLastDimCircular(window_size=Config.WINDOW_SIZE, W=3),
 
-        # DenseBlock
-        torch.nn.Linear(in_features=128, out_features=64, bias=True),
-        torch.nn.ReLU(inplace=False),
+            # Conv3DBlock
+            torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
+            torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
+            Squeeze(),
+            # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
+            torch.nn.ReLU(inplace=False),
 
-        # output layer
-        torch.nn.Linear(in_features=64, out_features=7, bias=True)
-    ))
+            # Conv2DBlock
+            torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
+            torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
+            Squeeze(),
+            # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
+            torch.nn.ReLU(inplace=False),
+
+            # Conv1DBlock
+            torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
+            torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
+            # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
+            torch.nn.ReLU(inplace=False),
+
+            # Conv1DBlock
+            torch.nn.Conv1d(128, 256, kernel_size=(3,), stride=(2,)),
+            torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
+            # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
+            torch.nn.ReLU(inplace=False),
+
+            # FlattenToLinear(),
+            torch.nn.Flatten(start_dim=1, end_dim=-1),
+            # DenseBlock
+            torch.nn.Linear(in_features=256, out_features=256, bias=True),
+            torch.nn.ReLU(inplace=False),
+
+            # DenseBlock
+            torch.nn.Linear(in_features=256, out_features=128, bias=True),
+            torch.nn.ReLU(inplace=False),
+
+            # DenseBlock
+            torch.nn.Linear(in_features=128, out_features=64, bias=True),
+            torch.nn.ReLU(inplace=False),
+
+            # output layer
+            torch.nn.Linear(in_features=64, out_features=7, bias=True)
+        ))
 
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss()

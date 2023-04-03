@@ -42,6 +42,8 @@ class Config:
     GEP_POWER_ITER = 100
     GEP_NUM_GROUPS = 3
 
+    TOY_STORY = True
+
     @staticmethod
     def to_dict() -> dict:
         members = inspect.getmembers(Config, lambda a: not (inspect.isroutine(a)))

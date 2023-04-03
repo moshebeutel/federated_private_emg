@@ -19,17 +19,22 @@ from collections.abc import Callable
 
 
 def create_public_dataset(public_users: str or list[str]):
-    user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
-                                                                                                  str) else \
-        [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
-    public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['validation'])
-    # public_data = list(public_loader)
-    #
-    # public_inputs = torch.vstack([i[0] for i in public_data])
-    # public_targets = torch.vstack([i[1] for i in public_data])
-    public_inputs, public_targets = next(iter(public_loader))
-    public_targets = labels_to_consecutive(public_targets).squeeze()
-    print('public data shape', public_inputs.shape, public_targets.shape)
+    if not Config.TOY_STORY:
+        user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
+                                                                                                      str) else \
+            [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
+        public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['validation'])
+        # public_data = list(public_loader)
+        # public_inputs = torch.vstack([i[0] for i in public_data])
+        # public_targets = torch.vstack([i[1] for i in public_data])
+        public_inputs, public_targets = next(iter(public_loader))
+        public_targets = labels_to_consecutive(public_targets).squeeze()
+        print('public data shape', public_inputs.shape, public_targets.shape)
+    else:
+        public_inputs = torch.randn(10, 1, 2)
+        coeff = torch.arange(2).reshape(2, 1).float()
+        public_targets = torch.matmul(public_inputs, coeff)
+
     return public_inputs.float(), public_targets.long()
 
 
