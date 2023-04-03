@@ -26,7 +26,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
     # _, loader, criterion, _ = astuple(train_objects)
     # model, loader, criterion, optimizer = astuple(train_objects)
     assert model.training, 'Model not in train mode'
-    running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
+    running_loss, correct_counter, sample_counter, counter = 0., 0, 0, 0
     device = next(model.parameters()).device
     # y_pred, y_labels = [], []
 
@@ -98,7 +98,6 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         else:  # No GEP
             for n, p in model.named_parameters():
                 accumulated_grads[n] += p.grad.data
-
 
         optimizer.step()
 

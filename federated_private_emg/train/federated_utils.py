@@ -111,10 +111,7 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
         user_loss, user_acc = 0.0, 0.0
 
         # Internal train
-        # init grads accumulator
-        internal_train_grads = OrderedDict()
-        for n, p in model.named_parameters():
-            internal_train_grads[n] = torch.zeros_like(p.data)
+
         # p_inner_bar = tqdm(range(Config.NUM_INTERNAL_EPOCHS), desc='Internal loop', leave=False)
         # for _ in p_inner_bar:
         for internal_epoch in range(Config.NUM_INTERNAL_EPOCHS):
@@ -126,10 +123,10 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
             # print("torch.cuda.memory_allocated: %fGB" % (torch.cuda.memory_allocated(0) / 1024 / 1024 / 1024))
             # print("torch.cuda.memory_reserved: %fGB" % (torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024))
             # print("torch.cuda.max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
-            # print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
+            print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
 
             for n, p in model.named_parameters():
-                internal_train_grads[n] += epoch_grads[n]
+                p.grad += (epoch_grads[n] / num_clients)
 
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
             user_acc += acc / Config.NUM_INTERNAL_EPOCHS
@@ -137,10 +134,6 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
         epoch_train_loss += user_loss / num_clients
         epoch_train_acc += user_acc / num_clients
 
-        for n, p in model.named_parameters():
-            p.grad += (internal_train_grads[n] / num_clients)
-
-        # del internal_train_grads
         # del local_model
 
         if i % Config.NUM_CLIENT_AGG == (Config.NUM_CLIENT_AGG - 1):

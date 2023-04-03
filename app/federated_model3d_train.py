@@ -49,20 +49,20 @@ def single_train():
         torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
         torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
         Squeeze(),
-        torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
+        # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv2DBlock
         torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
         torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
         Squeeze(),
-        torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
+        # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv1DBlock
         torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
         torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-        torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
+        # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
         torch.nn.ReLU(inplace=False),
 
         # Conv1DBlock
