@@ -25,7 +25,7 @@ class Config:
     EVAL_EVERY = 1
     TEST_AT_END = True
     NUM_CLIENT_AGG = 1
-    NUM_INTERNAL_EPOCHS = 100
+    NUM_INTERNAL_EPOCHS = 1
     WRITE_TO_WANDB = False
     # DP
     USE_GEP = True
@@ -37,22 +37,23 @@ class Config:
     DP_SIGMA = 1.0 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 0.001 #50
-    GEP_CLIP1 = 1.0 #20
+    GEP_CLIP0 = 0.05 #50
+    GEP_CLIP1 = 0.01 #20
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 3
 
 
     # TOY STORY
     TOY_STORY = True
-    PLOT_GRADS = True
+    INTERNAL_BENCHMARK = False
+    PLOT_GRADS = False
     DATA_SCALE = 1.0
     DATA_NOISE_SCALE = 0 * DATA_SCALE
-    DATA_DIM = 200
-    HIDDEN_DIM = 200
+    DATA_DIM = 2
+    HIDDEN_DIM = 2
     OUTPUT_DIM = 2
     GEP_PUBLIC_DATA_SIZE = 100
-    TRAIN_DATA_SIZE = BATCH_SIZE * 100
+    PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 10
 
     @staticmethod
     def to_dict() -> dict:

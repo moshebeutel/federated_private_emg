@@ -196,7 +196,7 @@ def create_toy_data(data_size: int):
 
 def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
     if Config.TOY_STORY:
-        X, y = create_toy_data(data_size=Config.TRAIN_DATA_SIZE)
+        X, y = create_toy_data(data_size=Config.PRIVATE_TRAIN_DATA_SIZE)
     else:
         if isinstance(datasets_folder_name, str):
             datasets_folder_name = [datasets_folder_name]

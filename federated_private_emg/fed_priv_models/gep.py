@@ -178,7 +178,7 @@ class GEP(nn.Module):
             self.approx_errors = pub_errs
         del anchor_grads
 
-    def forward(self, target_grad, logging=True):
+    def forward(self, target_grad, logging=False):
         # print('gep forward')
         # if 'selected_bases_list' not in self.__dict__.keys():
         #     print('selected_bases_list not in dict. return')

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import gc
 import math
 import copy
 from collections import OrderedDict
@@ -29,9 +31,11 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
     device = next(model.parameters()).device
 
     bench_model = copy.deepcopy(model)
-    bench_model.train()
 
-    # init grads accumulator
+    if Config.INTERNAL_BENCHMARK:
+        bench_model.train()
+
+    # Init grads accumulator
     accumulated_grads = OrderedDict()
     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
         accumulated_grads[n] = torch.zeros_like(p.data)
@@ -39,10 +43,11 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         p.grad = torch.zeros_like(p.data)
         bp.grad = torch.zeros_like(bp.data)
 
-    bench_optimizer = torch.optim.SGD(bench_model.parameters(), lr=Config.LEARNING_RATE,
-                                      weight_decay=Config.WEIGHT_DECAY, momentum=0.9)
+    if Config.INTERNAL_BENCHMARK:
+        bench_optimizer = torch.optim.SGD(bench_model.parameters(), lr=Config.LEARNING_RATE,
+                                          weight_decay=Config.WEIGHT_DECAY, momentum=0.9)
 
-    if Config.TOY_STORY and Config.PLOT_GRADS:
+    if Config.TOY_STORY and Config.PLOT_GRADS and Config.INTERNAL_BENCHMARK:
         grads_plot_list = {}
         bench_grads_plot_list = {}
 
@@ -65,12 +70,6 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
             assert not (bn in bench_grads_plot_list.keys())
             bench_grads_plot_list[bn] = [bp.grad.data.detach()]
 
-            # print('@@@ params $$$')
-            # print(n, p.data.detach(), bp.data.detach(), p.data.detach() - bp.data.detach())
-            #
-            # print('### grads &&&')
-            # print(n, p.grad.data.detach(), bp.grad.data.detach(), p.grad.data.detach() - bp.grad.data.detach())
-
     for k, batch in enumerate(loader):
 
         curr_batch_size = batch[1].size(0)
@@ -81,72 +80,48 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         sample_counter += curr_batch_size
         batch = (t.to(device) for t in batch)
         emg, labels = batch
-        if Config.TOY_STORY:
-            pass  # labels = torch.hstack([labels, torch.zeros_like(labels)])
-        else:
-            labels = labels_to_consecutive(labels).squeeze()
+
+        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).squeeze()
+
         optimizer.zero_grad()
-        bench_optimizer.zero_grad()
-
         outputs = model(emg.float())
-        bench_outputs = bench_model(emg.float())
-
         loss = criterion(outputs, labels)
-        bench_loss = criterion(bench_outputs, labels)
+        del outputs
+
         running_loss += float(loss)
-        _, predicted = torch.max(outputs.data, 1)
-        if model.training:
-            if Config.USE_GEP:
-                with backpack(BatchGrad()):
-                    loss.backward()
-            else:
-                loss.backward()
-            bench_loss.backward()
+
+        if Config.TOY_STORY:
+            pass
+        else:
+            _, predicted = torch.max(outputs.data, 1)
+            correct = (predicted == labels).sum().item()
+            correct_counter += int(correct)
+            del predicted
 
         if Config.USE_GEP:
-            assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
-            batch_grad_list = []
-            for p in model.parameters():
-                if hasattr(p, 'grad_batch'):
-                    batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-                    del p.grad_batch
-            clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
+            with backpack(BatchGrad()):
+                loss.backward()
+        else:
+            loss.backward()
 
-            clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+        if Config.INTERNAL_BENCHMARK:
+            bench_optimizer.zero_grad()
+            bench_outputs = bench_model(emg.float())
+            bench_loss = criterion(bench_outputs, labels)
+            bench_loss.backward()
+            del bench_outputs
 
-            if Config.ADD_DP_NOISE:
-                # Perturbation
-                theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
-                                           size=clipped_theta.shape,
-                                           device=clipped_theta.device)
-                grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
-                                          size=residual_grad.shape,
-                                          device=residual_grad.device)
+        if Config.USE_GEP and Config.INTERNAL_BENCHMARK:
+            gep_batch(accumulated_grads, gep, model)
+        else:  # No internal GEP
+            lr = optimizer.param_groups[0]['lr']
+            # print('Effective lr', lr)
+            with torch.no_grad():
+                for i, (n, p) in enumerate(model.named_parameters()):
+                    # accumulated_grads[n] -= p.grad.data
+                    # accumulated_grads[n] -= (p.grad.data * lr * len(loader))
+                    accumulated_grads[n] -= (p.grad.data * lr)
 
-                # print('theta_noise', torch.linalg.norm(theta_noise))
-                # print('grad_noise', torch.linalg.norm(grad_noise))
-                clipped_theta += theta_noise
-                residual_grad += grad_noise
-
-            # print('clipped_theta', clipped_theta, torch.linalg.norm(clipped_theta))
-            # print('residual_grad', residual_grad, torch.linalg.norm(residual_grad))
-            # print('target_grad', target_grad, torch.linalg.norm(target_grad))
-            # print('clean_grad', clean_grad, torch.linalg.norm(clean_grad))
-            # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
-            noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
-
-            offset = 0
-            for n, p in model.named_parameters():
-                shape = p.grad.shape
-                numel = p.grad.numel()
-                p.grad.data = Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape)  # clean_grad[offset:offset + numel].view(shape)
-                accumulated_grads[n] += noisy_grad[offset:offset + numel].view(shape)
-                offset += numel
-            del clean_grad, noisy_grad
-        else:  # No GEP
-            for i, (n, p) in enumerate(model.named_parameters()):
-                accumulated_grads[n] += p.grad.data
-        # print('Before Step')
         if Config.TOY_STORY and Config.PLOT_GRADS:
             for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
                 assert n in grads_plot_list.keys()
@@ -155,58 +130,33 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                 assert bn in bench_grads_plot_list.keys()
                 bench_grads_plot_list[bn].append(bp.grad.data.detach())
 
-                # print('@@@ params $$$')
-                # print(n, p.data.detach(), bp.data.detach(), p.data.detach() - bp.data.detach())
-                #
-                # print('### grads &&&')
-                # print(n, p.grad.data.detach(), bp.grad.data.detach(), p.grad.data.detach() - bp.grad.data.detach())
-
         optimizer.step()
-        bench_optimizer.step()
+
+        if Config.INTERNAL_BENCHMARK:
+            bench_optimizer.step()
 
         # print('After Step')
         if Config.TOY_STORY and Config.PLOT_GRADS:
-            for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-                assert n in params_plot_list.keys()
-                params_plot_list[n].append(p.data.detach() - params_plot_list[n][-1])
-                # params_plot_list[n].append(p.data.detach())
-
-                assert bn in bench_params_plot_list.keys()
-                bench_params_plot_list[bn].append(bp.data.detach() - bench_params_plot_list[bn][-1])
-                # bench_params_plot_list[bn].append(bp.data.detach())
-
-                # print('@@@ params $$$')
-                # print(n, p.data.detach(), bp.data.detach(), p.data.detach() - bp.data.detach())
-                #
-                # print('### grads &&&')
-                # print(n, p.grad.data.detach(), bp.grad.data.detach(), p.grad.data.detach() - bp.grad.data.detach())
-
-        # print('Grads before step')
-        # print('1.weight\n',
-        #       [(p, bp, p - bp) for (p, bp) in zip(grads_plot_list['1.weight'], bench_grads_plot_list['1.weight'])])
-        # print('1.bias\n',
-        #       [(p, bp, p - bp) for (p, bp) in zip(grads_plot_list['1.bias'], bench_grads_plot_list['1.bias'])])
-        #
-        #
-        # print('Params after step')
-        # print('1.weight\n',
-        #       [(p, bp, p - bp) for (p, bp) in zip(params_plot_list['1.weight'], bench_params_plot_list['1.weight'])])
-        # print('1.bias\n',
-        #       [(p, bp, p - bp) for (p, bp) in zip(params_plot_list['1.bias'], bench_params_plot_list['1.bias'])])
-
-        if not Config.TOY_STORY:
-            correct = (predicted == labels).sum().item()
-            correct_counter += int(correct)
-        else:
             losses.append(float(loss))
-            bench_losses.append(float(bench_loss))
-        # y_pred += predicted.cpu().tolist()
-        # y_labels += labels.cpu().tolist()
-        del loss, labels, emg, predicted, batch, outputs, bench_loss, bench_outputs
+            del loss
+            if Config.INTERNAL_BENCHMARK:
+                bench_losses.append(float(bench_loss))
+                del bench_loss
+            if Config.PLOT_GRADS:
+                for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+                    assert n in params_plot_list.keys()
+                    params_plot_list[n].append(p.data.detach() - params_plot_list[n][-1])
+                    # params_plot_list[n].append(p.data.detach())
+
+                    assert bn in bench_params_plot_list.keys()
+                    bench_params_plot_list[bn].append(bp.data.detach() - bench_params_plot_list[bn][-1])
+                    # bench_params_plot_list[bn].append(bp.data.detach())
+
+        del labels, emg, batch
+
+        # Release GPU and CPU memory - or at least try to ;)
         torch.cuda.empty_cache()
-    # if Config.USE_GEP:
-    #     for n, p in model.named_parameters():
-    #         p.grad.data = accumulated_grads[n]
+        gc.collect()
 
     epoch_loss = running_loss / float(counter)
     epoch_acc = 100 * correct_counter / sample_counter
@@ -246,8 +196,68 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                   f' CLIP1 = {Config.GEP_CLIP1}')
         plt.show()
         raise Exception
-    # train_objects.model = model
-    return epoch_loss, epoch_acc, accumulated_grads, model, optimizer
+
+    # GEP - perturb local gradients before returning to server
+    if Config.USE_GEP and not Config.INTERNAL_BENCHMARK:
+        with torch.no_grad():
+            for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+                diff = p.data - bp.data
+                bp.grad_batch = -diff.unsqueeze(dim=0)
+                # print(bn, bp.grad_batch, bp.grad)
+            gep_batch(accumulated_grads, gep, bench_model)
+            # for bn, bp in bench_model.named_parameters():
+            #     print(bn, bp.grad)
+    return epoch_loss, epoch_acc, accumulated_grads, bench_model, optimizer
+
+
+def gep_batch(accumulated_grads, gep, model):
+    assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
+    batch_grad_list = []
+    for p in model.parameters():
+        if hasattr(p, 'grad_batch'):
+            # print('p.grad_batch.shape', p.grad_batch.shape)
+            batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
+            del p.grad_batch
+
+    # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
+    clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
+    clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+    if Config.ADD_DP_NOISE:
+        # Perturbation
+        theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
+                                   size=clipped_theta.shape,
+                                   device=clipped_theta.device)
+        grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
+                                  size=residual_grad.shape,
+                                  device=residual_grad.device)
+
+        # print('theta_noise', torch.linalg.norm(theta_noise))
+        # print('grad_noise', torch.linalg.norm(grad_noise))
+        clipped_theta += theta_noise
+        residual_grad += grad_noise
+    # print('clipped_theta', clipped_theta, torch.linalg.norm(clipped_theta))
+    # print('residual_grad', residual_grad, torch.linalg.norm(residual_grad))
+    # print('target_grad', target_grad, torch.linalg.norm(target_grad))
+    # print('clean_grad', clean_grad, torch.linalg.norm(clean_grad))
+    # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
+    noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+    offset = 0
+    for n, p in model.named_parameters():
+        shape = p.grad.shape
+        numel = p.grad.numel()
+
+        # The following are for internal benchmark. Otherwise,
+        # Internal train is pure sgd (No projection, No clip, No noise) -
+        # GEP is done on accumulated grads before publishing
+
+        p.grad.data = noisy_grad[offset:offset + numel].view(shape)
+        # if Config.INTERNAL_BENCHMARK:
+        p.grad.data *= Config.BATCH_SIZE
+        # p.grad.data = Config.BATCH_SIZE * clean_grad[offset:offset + numel].view(shape)
+
+        accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
+        offset += numel
+    del clean_grad, noisy_grad, batch_grad_list
 
 
 def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now):
@@ -259,7 +269,7 @@ def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad
 
     outputs = model(inputs.float())
     loss = criterion(outputs, labels.long())
-    _, predicted = torch.max(outputs.data, 1)
+    _, predicted = None, 0 if Config.TOY_STORY else torch.max(outputs.data, 1)
     if model.training:
         loss.backward()
         if grad_step_now:
@@ -293,7 +303,8 @@ def run_single_epoch(train_objects: TrainObjects,
         sample_counter += curr_batch_size
         batch = (t.to(device) for t in batch)
         inputs, labels = batch
-        labels = labels_to_consecutive(labels).squeeze()
+
+        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).squeeze()
 
         grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
@@ -305,7 +316,7 @@ def run_single_epoch(train_objects: TrainObjects,
         correct = (predicted == labels).sum().item()
         correct_counter += int(correct)
 
-        y_pred += predicted.cpu().tolist()
+        y_pred += ([] if Config.TOY_STORY else predicted.cpu().tolist())
         y_labels += labels.cpu().tolist()
     loss = running_loss / float(counter)
     acc = 100 * correct_counter / sample_counter

@@ -74,18 +74,18 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
     return net, loss_fn, gep
 
 
-def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: TrainParams, dp_params: DpParams = None,
+def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams, dp_params: DpParams = None,
                                  attach_gep_to_model_fn=None, output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
     num_clients = len(train_user_list)
 
     device = next(model.parameters()).device
-    model.train()
-
-    for p in model.parameters():
-        p.grad = torch.zeros_like(p)
-    optimizer = torch.optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
-                                momentum=0.9)
+    # model.train()
+    #
+    # for p in model.parameters():
+    #     p.grad = torch.zeros_like(p)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
+    #                             momentum=0.9)
     optimizer.zero_grad()
 
     # pbar = tqdm(enumerate(train_user_list), desc='Iteration loop')
@@ -129,8 +129,8 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
             # print("torch.cuda.max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
             print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
 
-            for n, p in model.named_parameters():
-                p.grad += (epoch_grads[n] / num_clients)
+            for p, lp in zip(model.parameters(), local_model.parameters()):
+                p.grad.data += (lp.grad.data / num_clients)
 
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
             user_acc += acc / Config.NUM_INTERNAL_EPOCHS
@@ -138,7 +138,7 @@ def federated_train_single_epoch(model, loss_fn, train_user_list, train_params: 
         epoch_train_loss += user_loss / num_clients
         epoch_train_acc += user_acc / num_clients
 
-        # del local_model
+        del local_model
 
         if i % Config.NUM_CLIENT_AGG == (Config.NUM_CLIENT_AGG - 1):
             for p in model.parameters():
@@ -156,10 +156,19 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                           log2wandb=False,
                           output_fn=lambda s: None):
     eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
+    optimizer = torch.optim.SGD(model.parameters(),
+                                lr=Config.LEARNING_RATE*30.0,
+                                weight_decay=Config.WEIGHT_DECAY,
+                                momentum=0.9)
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
     for epoch in range(num_epochs):
+        model.train()
+
+        for p in model.parameters():
+            p.grad = torch.zeros_like(p)
+
         epoch_train_loss, epoch_train_acc, model = \
-            federated_train_single_epoch(model=model, loss_fn=loss_fn,
+            federated_train_single_epoch(model=model, loss_fn=loss_fn, optimizer=optimizer,
                                          train_user_list=train_user_list,
                                          train_params=internal_train_params,
                                          dp_params=dp_params, attach_gep_to_model_fn=attach_gep_to_model_fn)
@@ -170,7 +179,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
                                                   datasets=['validation'],
                                                   output_fn=lambda s: None)
-            loss, acc = run_single_epoch(TrainObjects(loader=validation_loader, model=model), train_params=eval_params)
+            loss, acc = run_single_epoch(TrainObjects(loader=validation_loader, model=model, criterion=loss_fn),
+                                         train_params=eval_params)
             val_loss += loss / len(validation_user_list)
             val_acc += acc / len(validation_user_list)
 
