@@ -39,10 +39,12 @@ def single_train():
     #                 output_info_fn=logger.info,
     #                 output_debug_fn=logger.debug)
     if Config.TOY_STORY:
-        model = torch.nn.linear.Sequential(
-        torch.nn.Flatten(start_dim=1, end_dim=-1),
-        # DenseBlock
-        torch.nn.Linear(in_features=2, out_features=1, bias=True))
+        model = torch.nn.Sequential(
+            torch.nn.Flatten(start_dim=1, end_dim=-1),
+            # DenseBlock
+            torch.nn.Linear(in_features=Config.DATA_DIM, out_features=Config.HIDDEN_DIM, bias=True),
+            # torch.nn.Linear(in_features=1000, out_features=100, bias=True),
+            torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=Config.OUTPUT_DIM, bias=True))
     else:
         model = torch.nn.Sequential(torch.nn.Sequential(
 
@@ -95,7 +97,7 @@ def single_train():
         ))
 
     model.to(Config.DEVICE)
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
     if Config.USE_GEP:
         # public_users = ['04', '13', '35', '08', '15', '24', '30', '31', '39', '42', '43', '45', '46']
         public_users = ['04']

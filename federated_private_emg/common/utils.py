@@ -3,6 +3,7 @@ from __future__ import annotations
 import errno
 import logging
 import os
+import random
 import re
 import sys
 import time
@@ -27,7 +28,10 @@ CONCAT_TRAJ = FULL_TRAJ_LIST * int(len(FULL_USER_LIST) / len(FULL_TRAJ_LIST))
 VALIDATION_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ))
 TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 
-
+# TOY STORY
+# DATA_COEFFS = [[random.random() * Config.DATA_SCALE, random.random() * Config.DATA_SCALE]
+#                for _ in range(Config.NUM_OUTPUTS)]
+DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float, requires_grad=False) * Config.DATA_SCALE
 class SimpleGlobalCounter:
     """
     Counter that can be safely passed to functions that increments its value.
@@ -179,16 +183,28 @@ def get_exp_name(module_name: str):
 
 
 def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
-    if isinstance(datasets_folder_name, str):
-        datasets_folder_name = [datasets_folder_name]
-    X_list, y_list = [], []
-    for folder_name in datasets_folder_name:
-        labels = torch.load(os.path.join(folder_name, y_filename))
-        non_zero_indices = (labels != 0).nonzero(as_tuple=True)[0].long().tolist()
-        X_list.append(torch.load(os.path.join(folder_name, x_filename))[non_zero_indices])
-        y_list.append(labels[non_zero_indices].unsqueeze(dim=-1))
-    X = torch.vstack(X_list)
-    y = torch.vstack(y_list).squeeze()
+    if Config.TOY_STORY:
+        with torch.no_grad():
+            u = float(datasets_folder_name[-2:])
+            X = torch.rand(Config.TRAIN_DATA_SIZE, 1, Config.DATA_DIM).float()
+            # coeff = torch.arange(2).reshape(2, 1).float()
+            # y = torch.matmul(X, coeff).squeeze()
+            # y = torch.clip(y, min=0, max=1.99).long()
+            # y = torch.hstack([DATA_COEFFS[i][0] * X[:, :, 0] + DATA_COEFFS[i][1] * X[:, :, 1]
+            #                   for i in range(Config.NUM_OUTPUTS)])
+            y = torch.matmul(X, DATA_COEFFS.T).squeeze()
+
+    else:
+        if isinstance(datasets_folder_name, str):
+            datasets_folder_name = [datasets_folder_name]
+        X_list, y_list = [], []
+        for folder_name in datasets_folder_name:
+            labels = torch.load(os.path.join(folder_name, y_filename))
+            non_zero_indices = (labels != 0).nonzero(as_tuple=True)[0].long().tolist()
+            X_list.append(torch.load(os.path.join(folder_name, x_filename))[non_zero_indices])
+            y_list.append(labels[non_zero_indices].unsqueeze(dim=-1))
+        X = torch.vstack(X_list)
+        y = torch.vstack(y_list).squeeze()
     return X, y
 
 
@@ -218,7 +234,8 @@ def init_data_loaders(datasets_folder_name,
     assert datasets, 'Given empty datasets list'
     for dataset in datasets:
         X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt')
-        assert_loaded_datasets(X, y)
+        if not Config.TOY_STORY:
+            assert_loaded_datasets(X, y)
         output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
         loader = torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(X, y),

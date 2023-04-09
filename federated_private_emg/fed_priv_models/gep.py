@@ -37,7 +37,10 @@ def orthogonalize(matrix):
 
 def clip_column(tsr, clip=1.0, inplace=True):
     if (inplace):
-        inplace_clipping(tsr, torch.tensor(clip).cuda())
+        if torch.cuda.is_available():
+            inplace_clipping(tsr, torch.tensor(clip).cuda())
+        else:
+            inplace_clipping(tsr, torch.tensor(clip))
     else:
         norms = torch.norm(tsr, dim=1)
 
@@ -147,7 +150,9 @@ class GEP(nn.Module):
             pub_errs = []
 
             sqrt_num_param_list = np.sqrt(np.array(num_param_list))
-            num_bases_list = self.num_bases * (sqrt_num_param_list / np.sum(sqrt_num_param_list))
+            # *** Cancel normalization to avoid all zeros when casting to int in TOY_STORY
+            # num_bases_list = self.num_bases * (sqrt_num_param_list / np.sum(sqrt_num_param_list))
+            num_bases_list = self.num_bases * sqrt_num_param_list
             num_bases_list = num_bases_list.astype(np.int)
 
             total_p = 0
@@ -168,11 +173,12 @@ class GEP(nn.Module):
 
             self.selected_bases_list = selected_bases_list
             # print(f'selected bases list len {len(self.selected_bases_list)}')
+            # print('self.selected_bases_list', self.selected_bases_list)
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
         del anchor_grads
 
-    def forward(self, target_grad, logging=False):
+    def forward(self, target_grad, logging=True):
         # print('gep forward')
         # if 'selected_bases_list' not in self.__dict__.keys():
         #     print('selected_bases_list not in dict. return')

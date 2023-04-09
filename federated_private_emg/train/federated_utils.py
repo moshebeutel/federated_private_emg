@@ -1,5 +1,6 @@
 import copy
 import os
+import random
 from collections import OrderedDict
 
 import torch
@@ -7,9 +8,8 @@ import wandb
 from tqdm import tqdm
 
 from common.config import Config
-from common.utils import init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive
+from common.utils import DATA_COEFFS, init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive
 from differential_privacy.params import DpParams
-from fed_priv_models.pad_operators import NetWrapper
 from train.params import TrainParams
 from train.train_objects import TrainObjects
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads
@@ -19,7 +19,18 @@ from collections.abc import Callable
 
 
 def create_public_dataset(public_users: str or list[str]):
-    if not Config.TOY_STORY:
+    if Config.TOY_STORY:
+        with torch.no_grad():
+            public_inputs = torch.rand(Config.GEP_PUBLIC_DATA_SIZE, 1, Config.DATA_DIM).float()
+            # coeff = torch.arange(2).reshape(2, 1).float()
+            # public_targets = (torch.matmul(public_inputs, coeff)).squeeze()
+            # public_targets = torch.clip(public_targets, min=0, max=1.99).long()
+            # public_targets = torch.hstack([DATA_COEFFS[i][0] * public_inputs[:, :, 0] + DATA_COEFFS[i][1] *
+            #                                public_inputs[:, :, 1] for i in range(Config.NUM_OUTPUTS)])
+            public_targets = torch.matmul(public_inputs, DATA_COEFFS.T).squeeze()
+
+    else:
+
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
                                                                                                       str) else \
             [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
@@ -28,24 +39,20 @@ def create_public_dataset(public_users: str or list[str]):
         # public_inputs = torch.vstack([i[0] for i in public_data])
         # public_targets = torch.vstack([i[1] for i in public_data])
         public_inputs, public_targets = next(iter(public_loader))
-        public_targets = labels_to_consecutive(public_targets).squeeze()
+        public_targets = labels_to_consecutive(public_targets).squeeze().long()
         print('public data shape', public_inputs.shape, public_targets.shape)
-    else:
-        public_inputs = torch.randn(10, 1, 2)
-        coeff = torch.arange(2).reshape(2, 1).float()
-        public_targets = torch.matmul(public_inputs, coeff)
 
-    return public_inputs.float(), public_targets.long()
+    return public_inputs.float(), public_targets
 
 
 def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], num_bases: int,
                batch_size: int, clip0: float, clip1: float, power_iter: int,
                num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor):
+    device = next(net.parameters()).device
     # print('\n==> Creating GEP class instance')
     gep = GEP(num_bases, batch_size, clip0, clip1, power_iter).cuda()
     ## attach auxiliary data to GEP instance
-
-    public_inputs, public_targets = public_inputs.cuda(), public_targets.cuda()
+    public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
     gep.public_inputs = public_inputs
     gep.public_targets = public_targets
 

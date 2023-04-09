@@ -16,16 +16,19 @@ def main():
 
     logger = config_logger(f'{exp_name}_logger', level=logging.INFO, log_folder='../log/')
 
-    all_users_tensors_folder = os.listdir(Config.TENSORS_DATA_DIR)
-    for u in all_users_tensors_folder:
+    if Config.TOY_STORY:
+        pass
+    else:
+        all_users_tensors_folder = os.listdir(Config.TENSORS_DATA_DIR)
+        for u in all_users_tensors_folder:
 
-        src_tensors_folder = os.path.join(Config.TENSORS_DATA_DIR, u)
-        windowed_tensors_folder = os.path.join(Config.WINDOWED_DATA_DIR, u)
-        os.makedirs(windowed_tensors_folder, exist_ok=True)
+            src_tensors_folder = os.path.join(Config.TENSORS_DATA_DIR, u)
+            windowed_tensors_folder = os.path.join(Config.WINDOWED_DATA_DIR, u)
+            os.makedirs(windowed_tensors_folder, exist_ok=True)
 
-        for dataset in ['train', 'validation', 'test']:
-            create_windows(src_tensors_folder=src_tensors_folder, windowed_tensors_folder=windowed_tensors_folder,
-                           x_filename=f'X_{dataset}', y_filename=f'y_{dataset}', output_fn=logger.info)
+            for dataset in ['train', 'validation', 'test']:
+                create_windows(src_tensors_folder=src_tensors_folder, windowed_tensors_folder=windowed_tensors_folder,
+                               x_filename=f'X_{dataset}', y_filename=f'y_{dataset}', output_fn=logger.info)
 
 
 def create_windows(src_tensors_folder, windowed_tensors_folder,
