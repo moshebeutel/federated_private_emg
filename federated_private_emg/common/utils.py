@@ -31,7 +31,10 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 # TOY STORY
 # DATA_COEFFS = [[random.random() * Config.DATA_SCALE, random.random() * Config.DATA_SCALE]
 #                for _ in range(Config.NUM_OUTPUTS)]
-DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float, requires_grad=False) * Config.DATA_SCALE
+DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
+                         requires_grad=False) * Config.DATA_SCALE
+
+
 class SimpleGlobalCounter:
     """
     Counter that can be safely passed to functions that increments its value.
@@ -182,18 +185,18 @@ def get_exp_name(module_name: str):
     return exp_name
 
 
+@torch.no_grad()
+def create_toy_data(data_size: int):
+    assert Config.TOY_STORY, 'TOY_STORY disabled'
+    X = torch.rand(data_size, 1, Config.DATA_DIM).float()
+    y = torch.matmul(X, DATA_COEFFS.T).squeeze()
+    y += torch.randn_like(y) * Config.DATA_NOISE_SCALE
+    return X, y
+
+
 def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
     if Config.TOY_STORY:
-        with torch.no_grad():
-            u = float(datasets_folder_name[-2:])
-            X = torch.rand(Config.TRAIN_DATA_SIZE, 1, Config.DATA_DIM).float()
-            # coeff = torch.arange(2).reshape(2, 1).float()
-            # y = torch.matmul(X, coeff).squeeze()
-            # y = torch.clip(y, min=0, max=1.99).long()
-            # y = torch.hstack([DATA_COEFFS[i][0] * X[:, :, 0] + DATA_COEFFS[i][1] * X[:, :, 1]
-            #                   for i in range(Config.NUM_OUTPUTS)])
-            y = torch.matmul(X, DATA_COEFFS.T).squeeze()
-
+        X, y = create_toy_data(data_size=Config.TRAIN_DATA_SIZE)
     else:
         if isinstance(datasets_folder_name, str):
             datasets_folder_name = [datasets_folder_name]

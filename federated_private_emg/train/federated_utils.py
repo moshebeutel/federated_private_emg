@@ -8,7 +8,8 @@ import wandb
 from tqdm import tqdm
 
 from common.config import Config
-from common.utils import DATA_COEFFS, init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive
+from common.utils import DATA_COEFFS, init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive, \
+    create_toy_data
 from differential_privacy.params import DpParams
 from train.params import TrainParams
 from train.train_objects import TrainObjects
@@ -20,17 +21,8 @@ from collections.abc import Callable
 
 def create_public_dataset(public_users: str or list[str]):
     if Config.TOY_STORY:
-        with torch.no_grad():
-            public_inputs = torch.rand(Config.GEP_PUBLIC_DATA_SIZE, 1, Config.DATA_DIM).float()
-            # coeff = torch.arange(2).reshape(2, 1).float()
-            # public_targets = (torch.matmul(public_inputs, coeff)).squeeze()
-            # public_targets = torch.clip(public_targets, min=0, max=1.99).long()
-            # public_targets = torch.hstack([DATA_COEFFS[i][0] * public_inputs[:, :, 0] + DATA_COEFFS[i][1] *
-            #                                public_inputs[:, :, 1] for i in range(Config.NUM_OUTPUTS)])
-            public_targets = torch.matmul(public_inputs, DATA_COEFFS.T).squeeze()
-
+        public_inputs, public_targets = create_toy_data(data_size=Config.GEP_PUBLIC_DATA_SIZE)
     else:
-
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
                                                                                                       str) else \
             [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]

@@ -9,7 +9,7 @@ class Config:
     # DEVICE = 'cpu'
     USE_GROUPNORM = False
     USE_DROPOUT = False
-    DEVICE = 'cpu'
+    DEVICE = 'cuda'
     BATCH_SIZE = 256
     NUM_EPOCHS = 1000
     NUM_WORKERS = 2
@@ -37,8 +37,8 @@ class Config:
     DP_SIGMA = 1.0 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 5 #50
-    GEP_CLIP1 = 10 #20
+    GEP_CLIP0 = 0.001 #50
+    GEP_CLIP1 = 1.0 #20
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 3
 
@@ -47,8 +47,9 @@ class Config:
     TOY_STORY = True
     PLOT_GRADS = True
     DATA_SCALE = 1.0
+    DATA_NOISE_SCALE = 0 * DATA_SCALE
     DATA_DIM = 200
-    HIDDEN_DIM = 600
+    HIDDEN_DIM = 200
     OUTPUT_DIM = 2
     GEP_PUBLIC_DATA_SIZE = 100
     TRAIN_DATA_SIZE = BATCH_SIZE * 100

@@ -213,25 +213,12 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
 
     if Config.PLOT_GRADS:
         zip_params_weight = zip(params_plot_list['2.weight'], bench_params_plot_list['2.weight'])
-        # zip_params_bias = zip(params_plot_list['1.bias'], bench_params_plot_list['1.bias'])
+        # zip_params_bias = zip(params_plot_list['2.bias'], bench_params_plot_list['1.bias'])
         # zip_grads_weight = zip(grads_plot_list['2.weight'], bench_grads_plot_list['2.weight'])
-        # zip_grads_bias = zip(grads_plot_list['1.bias'], bench_grads_plot_list['1.bias'])
+        # zip_grads_bias = zip(grads_plot_list['2.bias'], bench_grads_plot_list['2.bias'])
         zip_losses = zip(losses, bench_losses)
         # print(len(grads_plot_list['1.weight']), len(grads_plot_list['1.bias']))
         fig, axs = plt.subplots(7, 1, figsize=(20, 20))
-
-        # axs[0].plot([float(t[0, 0]) for t in params_plot_list['1.weight']], color='b')
-        # axs[1].plot([float(t[1, 0]) for t in params_plot_list['1.weight']], color='r')
-        # axs[2].plot([float(t[0]) for t in params_plot_list['1.bias']], color='y')
-        # axs[3].plot([float(t[0, 0]) for t in bench_params_plot_list['1.weight']], color='b')
-        # axs[4].plot([float(t[1, 0]) for t in bench_params_plot_list['1.weight']], color='r')
-        # axs[5].plot([float(t[0]) for t in bench_params_plot_list['1.bias']], color='y')
-        # axs[6].plot([float(t[0, 1]) for t in params_plot_list['1.weight']], color='b')
-        # axs[7].plot([float(t[1, 1]) for t in params_plot_list['1.weight']], color='r')
-        # axs[8].plot([float(t[1]) for t in params_plot_list['1.bias']], color='y')
-        # axs[9].plot([float(t[0, 1]) for t in bench_params_plot_list['1.weight']], color='b')
-        # axs[10].plot([float(t[1, 1]) for t in bench_params_plot_list['1.weight']], color='r')
-        # axs[11].plot([float(t[1]) for t in bench_params_plot_list['1.bias']], color='y')
 
         axs[0].plot([abs(float(t1[0, 0] - t2[0, 0])) for (t1, t2) in zip_params_weight], color='b')
         axs[1].plot([abs(float(t1[1, 0] - t2[1, 0])) for (t1, t2) in zip_params_weight], color='r')
@@ -250,16 +237,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         axs[4].plot(losses)
         axs[5].plot(bench_losses)
         axs[6].plot([abs(l1 - l2) for (l1, l2) in zip_losses])
-        # GEP_CLIP0 = 5  # 50
-        # GEP_CLIP1 = 1  # 20
-        # GEP_POWER_ITER = 1
-        # GEP_NUM_GROUPS = 3
-        #
-        # # TOY STORY
-        # TOY_STORY = True
-        # PLOT_GRADS = True
-        # NUM_OUTPUTS = 200
-        # DATA_SCALE = 10.0
+
         plt.title(f'OUTPUT_DIM = {Config.OUTPUT_DIM},'
                   f' DATA_DIM = {Config.DATA_DIM},  '
                   f'DP_SIGMA = {Config.DP_SIGMA},'
