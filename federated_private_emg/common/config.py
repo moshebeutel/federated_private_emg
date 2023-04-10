@@ -1,5 +1,6 @@
 from __future__ import annotations
 import inspect
+from math import sqrt, log
 
 
 class Config:
@@ -26,24 +27,35 @@ class Config:
     WINDOW_SIZE = 260
     EVAL_EVERY = 1
     TEST_AT_END = True
-    NUM_CLIENT_AGG = 1
-    NUM_INTERNAL_EPOCHS = 1
+
     WRITE_TO_WANDB = True
+
+    # FL
+    NUM_CLIENT_AGG = 10
+    NUM_INTERNAL_EPOCHS = 1
+
+
     # DP
-    USE_GEP = True
+    USE_GEP = False
+    USE_SGD_DP = True
     ADD_DP_NOISE = True
     LOT_SIZE_IN_BATCHES = 5
-    DP_C = 1
-    DP_EPSILON = 1.0
-    DP_DELTA = 0.001
-    DP_SIGMA = 1.0 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
+    DP_EPSILON = 8.0
+    DP_DELTA = 1e-5
+
+
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 0.5 #50
-    GEP_CLIP1 = 0.1 #20
+    GEP_CLIP0 = 0.1 #50
+    GEP_CLIP1 = 0.02 #20
+    GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
+    GEP_SIGMA1 = 2.0 * GEP_CLIP1 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 3
 
+    # DP_SGD
+    DP_C = sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
+    DP_SIGMA = sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # TOY STORY
     TOY_STORY = True
@@ -52,11 +64,11 @@ class Config:
     DATA_SCALE = 1.0
     USER_BIAS_SCALE = 0.1 * DATA_SCALE
     DATA_NOISE_SCALE = 0.1 * DATA_SCALE
-    DATA_DIM = 2
-    HIDDEN_DIM = 2
+    DATA_DIM = 200
+    HIDDEN_DIM = 200
     OUTPUT_DIM = 2
     GEP_PUBLIC_DATA_SIZE = 100
-    PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 20
+    PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 10
     GLOBAL_LEARNING_RATE = (PRIVATE_TRAIN_DATA_SIZE / BATCH_SIZE) * LEARNING_RATE
     @staticmethod
     def to_dict() -> dict:

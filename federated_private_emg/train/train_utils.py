@@ -24,6 +24,29 @@ from common.config import Config
 import matplotlib.pyplot as plt
 
 
+def sgd_dp_batch(model, batchsize):
+
+    grad_norm_list = torch.zeros(batchsize).cuda()
+    for p in model.parameters():
+        flat_g = p.grad_batch.reshape(batchsize, -1)
+        current_norm_list = torch.norm(flat_g, dim=1)
+        grad_norm_list += torch.square(current_norm_list)
+    grad_norm_list = torch.sqrt(grad_norm_list) / Config.DP_C
+    grad_norm_list = torch.clip(grad_norm_list, min=1)
+
+    for p in model.parameters():
+        flat_g = p.grad_batch.reshape(batchsize, -1)
+        flat_g = torch.div(flat_g, grad_norm_list.reshape(-1, 1))
+        p.grad_batch = flat_g.reshape(batchsize, *p.shape)
+        p.grad = torch.mean(p.grad_batch, dim=0)
+        # del p.grad_batch
+        # Add DP noise to gradients
+        noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C, size=p.grad.size(), device=p.device) / batchsize
+        p.grad += noise
+    del grad_norm_list
+
+
+
 def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                                 batch_size: int, gep: GEP = None, use_dp_noise: bool = False) -> (float, float):
     assert model.training, 'Model not in train mode'
@@ -198,38 +221,41 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         raise Exception
 
     # GEP - perturb local gradients before returning to server
-    if Config.USE_GEP and not Config.INTERNAL_BENCHMARK:
+    if not Config.INTERNAL_BENCHMARK:
         with torch.no_grad():
             for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
                 diff = p.data - bp.data
-                bp.grad_batch = -diff.unsqueeze(dim=0)
+                bp.grad.data = -diff.unsqueeze(dim=0)
+                # bp.grad_batch = -diff.unsqueeze(dim=0)
                 # print(bn, bp.grad_batch, bp.grad)
-            gep_batch(accumulated_grads, gep, bench_model)
+
+
+
             # for bn, bp in bench_model.named_parameters():
             #     print(bn, bp.grad)
     return epoch_loss, epoch_acc, accumulated_grads, bench_model, optimizer
 
 
-def gep_batch(accumulated_grads, gep, model):
+def gep_batch(accumulated_grads, gep, model, batchsize):
     assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
     batch_grad_list = []
     for p in model.parameters():
         if hasattr(p, 'grad_batch'):
             # print('p.grad_batch.shape', p.grad_batch.shape)
             batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-            del p.grad_batch
+            # del p.grad_batch
 
     # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
     clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
     if Config.ADD_DP_NOISE:
         # Perturbation
-        theta_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP0 / Config.BATCH_SIZE,
+        theta_noise = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
                                    size=clipped_theta.shape,
-                                   device=clipped_theta.device)
-        grad_noise = torch.normal(0, Config.DP_SIGMA * Config.GEP_CLIP1 / Config.BATCH_SIZE,
+                                   device=clipped_theta.device) / batchsize
+        grad_noise = torch.normal(0, Config.GEP_SIGMA1 * Config.GEP_CLIP1,
                                   size=residual_grad.shape,
-                                  device=residual_grad.device)
+                                  device=residual_grad.device) / batchsize
 
         # print('theta_noise', torch.linalg.norm(theta_noise))
         # print('grad_noise', torch.linalg.norm(grad_noise))
@@ -238,9 +264,11 @@ def gep_batch(accumulated_grads, gep, model):
     # print('clipped_theta', clipped_theta, torch.linalg.norm(clipped_theta))
     # print('residual_grad', residual_grad, torch.linalg.norm(residual_grad))
     # print('target_grad', target_grad, torch.linalg.norm(target_grad))
+    # # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
     # print('clean_grad', clean_grad, torch.linalg.norm(clean_grad))
-    # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
     noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+    # print('noisy_grad', noisy_grad, torch.linalg.norm(noisy_grad))
+
     offset = 0
     for n, p in model.named_parameters():
         shape = p.grad.shape
@@ -251,11 +279,11 @@ def gep_batch(accumulated_grads, gep, model):
         # GEP is done on accumulated grads before publishing
 
         p.grad.data = noisy_grad[offset:offset + numel].view(shape)
-        # if Config.INTERNAL_BENCHMARK:
-        p.grad.data *= Config.BATCH_SIZE
+        # p.grad.data *= batchsize
+        # p.grad.data *= Config.BATCH_SIZE
         # p.grad.data = Config.BATCH_SIZE * clean_grad[offset:offset + numel].view(shape)
-
-        accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
+        if accumulated_grads is not None:
+            accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
         offset += numel
     del clean_grad, noisy_grad, batch_grad_list
 

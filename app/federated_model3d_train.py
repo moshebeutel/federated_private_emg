@@ -14,27 +14,39 @@ from train.params import TrainParams
 from common.config import Config
 from functools import *
 
-
-# train_user_list=['03', '05', '06', '09', '11', '14', '16',
-#                  '17', '18', '19', '25', '26', '27', '29',
-#                  '33', '34', '36', '38',
-#                   # public users
-#                  '04', '13', '35', '08', '15', '24', '30', '31', '39',
-#                  '42', '43', '45', '46'
-#                  ]
+# public_users = ['04', '13', '35', '08']
+train_user_list = ['03', '05', '06', '09', '11', '14', '16',
+                   '17', '18', '19', '25', '26', '27', '29',
+                   '33', '34', '36', '38',
+                   '04', '13', '35', '08', '15', '24', '30', '31', '39',
+                   '42', '43', '45', '46']
 # train_user_list=['04', '13', '35']
-train_user_list=['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
+# train_user_list=['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
 # train_user_list=['04']
-validation_user_list=['22', '23', '47']
+validation_user_list = ['22', '23', '47']
 # validation_user_list=['04']
-test_user_list=['07', '12', '48']
+test_user_list = ['07', '12', '48']
 
 
 def main():
-    exp_name = utils.get_exp_name('TOY STORY Federated')
+    q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
+    sigma0 = '%.3f' % Config.GEP_SIGMA0
+    sigma1 = '%.3f' % Config.GEP_SIGMA1
+    clip0 = '%.3f' % Config.GEP_CLIP0
+    clip1 = '%.3f' % Config.GEP_CLIP1
+
+    dp_sigma = '%.3f' % Config.DP_SIGMA
+    dp_c = '%.3f' % Config.DP_C
+
+    if Config.USE_GEP:
+        exp_name = f'High Dim GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+    elif Config.USE_SGD_DP:
+        exp_name = f'High Dim SGD_DP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
+    # exp_name = utils.get_exp_name('TOY STORY Federated')
     # logger = utils.config_logger(f'{exp_name}_logger',
     #                              level=logging.INFO, log_folder='../log/')
     # logger.info(exp_name)
+    print(exp_name)
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         config_dict = Config.to_dict()
@@ -130,7 +142,8 @@ def single_train():
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
         attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
-                                      batch_size=Config.BATCH_SIZE, clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
+                                      batch_size=Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else Config.NUM_CLIENT_AGG,
+                                      clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
                                       power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
                                       public_inputs=public_inputs, public_targets=public_targets)
 
