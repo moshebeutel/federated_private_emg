@@ -5,6 +5,7 @@ import torch.nn
 
 import wandb
 from common import utils
+from common.utils import USERS_BIASES, USERS_VARIANCES
 from differential_privacy.params import DpParams
 from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, FlattenToLinear, PadBeforeLast, Squeeze
 from federated_private_emg.fed_priv_models.model3d import Model3d
@@ -14,15 +15,35 @@ from common.config import Config
 from functools import *
 
 
+# train_user_list=['03', '05', '06', '09', '11', '14', '16',
+#                  '17', '18', '19', '25', '26', '27', '29',
+#                  '33', '34', '36', '38',
+#                   # public users
+#                  '04', '13', '35', '08', '15', '24', '30', '31', '39',
+#                  '42', '43', '45', '46'
+#                  ]
+# train_user_list=['04', '13', '35']
+train_user_list=['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
+# train_user_list=['04']
+validation_user_list=['22', '23', '47']
+# validation_user_list=['04']
+test_user_list=['07', '12', '48']
+
+
 def main():
-    exp_name = utils.get_exp_name('SINGLE USER with group norm' + os.path.basename(__file__)[:-3])
+    exp_name = utils.get_exp_name('TOY STORY Federated')
     # logger = utils.config_logger(f'{exp_name}_logger',
     #                              level=logging.INFO, log_folder='../log/')
     # logger.info(exp_name)
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
-        wandb.config.update({'batch_size': Config.BATCH_SIZE, 'learning_rate': Config.LEARNING_RATE,
-                             'num_internal_epochs': Config.NUM_INTERNAL_EPOCHS, 'GEP': Config.USE_GEP})
+        config_dict = Config.to_dict()
+        config_dict.update(USERS_BIASES)
+        config_dict.update(USERS_VARIANCES)
+        config_dict.update({'train_user_list': train_user_list,
+                            'validation_user_list': validation_user_list,
+                            'test_user_list': test_user_list})
+        wandb.config.update(config_dict)
 
     single_train()
 
@@ -100,7 +121,8 @@ def single_train():
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
     if Config.USE_GEP:
         # public_users = ['04', '13', '35', '08', '15', '24', '30', '31', '39', '42', '43', '45', '46']
-        public_users = ['04']
+        public_users = ['04', '13', '35', '08']
+        # public_users = ['04']
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
         attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
@@ -118,18 +140,9 @@ def single_train():
                                         test_at_end=False)
 
     federated_train_model(model=model, loss_fn=loss_fn,
-                          # train_user_list=['03', '05', '06', '09', '11', '14', '16',
-                          #                  '17', '18', '19', '25', '26', '27', '29',
-                          #                  '33', '34', '36', '38',
-                          #                   # public users
-                          #                  '04', '13', '35', '08', '15', '24', '30', '31', '39',
-                          #                  '42', '43', '45', '46'
-                          #                  ],
-                          train_user_list=['04', '13', '35'],
-                          # train_user_list=['04'],
-                          validation_user_list=['22', '23', '47'],
-                          # validation_user_list=['04'],
-                          test_user_list=['07', '12', '48'],
+                          train_user_list=train_user_list,
+                          validation_user_list=validation_user_list,
+                          test_user_list=test_user_list,
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
                           dp_params=dp_params if Config.ADD_DP_NOISE else None,

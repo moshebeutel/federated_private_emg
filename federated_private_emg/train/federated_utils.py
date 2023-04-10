@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from common.config import Config
 from common.utils import DATA_COEFFS, init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive, \
-    create_toy_data
+    create_toy_data, USERS_BIASES, USERS_VARIANCES
 from differential_privacy.params import DpParams
 from train.params import TrainParams
 from train.train_objects import TrainObjects
@@ -21,7 +21,18 @@ from collections.abc import Callable
 
 def create_public_dataset(public_users: str or list[str]):
     if Config.TOY_STORY:
-        public_inputs, public_targets = create_toy_data(data_size=Config.GEP_PUBLIC_DATA_SIZE)
+        if not isinstance(public_users, list):
+            public_users = [public_users]
+        public_user_input_list, public_user_targets_list = [],[]
+        for u in public_users:
+            bias = USERS_BIASES[u]
+            variance = USERS_VARIANCES[u]
+            public_user_input, public_user_target =\
+                create_toy_data(data_size=Config.GEP_PUBLIC_DATA_SIZE, bias=bias, variance=variance)
+            public_user_input_list.append(public_user_input)
+            public_user_targets_list.append(public_user_target)
+        public_inputs = torch.vstack(public_user_input_list)
+        public_targets = torch.vstack(public_user_targets_list)
     else:
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
                                                                                                       str) else \
@@ -74,7 +85,8 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
     return net, loss_fn, gep
 
 
-def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams, dp_params: DpParams = None,
+def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams,
+                                 dp_params: DpParams = None,
                                  attach_gep_to_model_fn=None, output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
     num_clients = len(train_user_list)
@@ -128,6 +140,10 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
             # print("torch.cuda.memory_reserved: %fGB" % (torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024))
             # print("torch.cuda.max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
             print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
+            if Config.WRITE_TO_WANDB:
+                wandb.log({
+                    f'User {u} Train Loss': loss
+                })
 
             for p, lp in zip(model.parameters(), local_model.parameters()):
                 p.grad.data += (lp.grad.data / num_clients)
@@ -157,7 +173,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                           output_fn=lambda s: None):
     eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
     optimizer = torch.optim.SGD(model.parameters(),
-                                lr=Config.LEARNING_RATE*30.0,
+                                lr=Config.GLOBAL_LEARNING_RATE * len(train_user_list),
                                 weight_decay=Config.WEIGHT_DECAY,
                                 momentum=0.9)
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
@@ -181,6 +197,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                                   output_fn=lambda s: None)
             loss, acc = run_single_epoch(TrainObjects(loader=validation_loader, model=model, criterion=loss_fn),
                                          train_params=eval_params)
+
+            if log2wandb:
+                wandb.log({
+                    f'User {u} Validation Loss': loss
+                })
+
             val_loss += loss / len(validation_user_list)
             val_acc += acc / len(validation_user_list)
 
@@ -194,9 +216,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         if log2wandb:
             wandb.log({
                 'epoch_train_loss': epoch_train_loss,
-                'epoch_train_acc': epoch_train_acc,
+                # 'epoch_train_acc': epoch_train_acc,
                 'epoch_validation_loss': val_loss,
-                'epoch_validation_acc': val_acc,
+                # 'epoch_validation_acc': val_acc,
             })
 
     # Test Eval

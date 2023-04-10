@@ -34,6 +34,11 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
+USERS_BIASES = {user: bias for (user, bias)
+                in zip(FULL_USER_LIST, (Config.USER_BIAS_SCALE * torch.randn(size=(len(FULL_USER_LIST),))).tolist())}
+USERS_VARIANCES = {user: variance for (user, variance)
+                   in zip(FULL_USER_LIST, (Config.DATA_NOISE_SCALE * torch.randn(size=(len(FULL_USER_LIST),))).tolist())}
+
 
 class SimpleGlobalCounter:
     """
@@ -186,17 +191,22 @@ def get_exp_name(module_name: str):
 
 
 @torch.no_grad()
-def create_toy_data(data_size: int):
+def create_toy_data(data_size: int, bias: float = 0.0, variance: float = Config.DATA_NOISE_SCALE):
     assert Config.TOY_STORY, 'TOY_STORY disabled'
     X = torch.rand(data_size, 1, Config.DATA_DIM).float()
     y = torch.matmul(X, DATA_COEFFS.T).squeeze()
-    y += torch.randn_like(y) * Config.DATA_NOISE_SCALE
+    y += torch.ones_like(y) * bias
+    y += torch.randn_like(y) * variance
     return X, y
 
 
 def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
     if Config.TOY_STORY:
-        X, y = create_toy_data(data_size=Config.PRIVATE_TRAIN_DATA_SIZE)
+        u = datasets_folder_name[-2:]
+        bias = USERS_BIASES[u]
+        variance = USERS_VARIANCES[u]
+        # print(f'Create toy data for user {u} who has bias {bias} and variance {variance}')
+        X, y = create_toy_data(data_size=Config.PRIVATE_TRAIN_DATA_SIZE, bias=bias, variance=variance)
     else:
         if isinstance(datasets_folder_name, str):
             datasets_folder_name = [datasets_folder_name]

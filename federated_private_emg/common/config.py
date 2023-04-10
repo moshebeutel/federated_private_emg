@@ -9,12 +9,13 @@ class Config:
     # DEVICE = 'cpu'
     USE_GROUPNORM = False
     USE_DROPOUT = False
-    DEVICE = 'cuda'
+    DEVICE = 'cpu'
     BATCH_SIZE = 256
     NUM_EPOCHS = 1000
     NUM_WORKERS = 2
     OPTIMIZER_TYPE = 'sgd'
     LEARNING_RATE = 0.001
+
     WEIGHT_DECAY = 1e-3
     MOMENTUM = 0.9
     UNIFIED_DATA_DIR = '../data/unified_dataframes'
@@ -26,7 +27,7 @@ class Config:
     TEST_AT_END = True
     NUM_CLIENT_AGG = 1
     NUM_INTERNAL_EPOCHS = 1
-    WRITE_TO_WANDB = False
+    WRITE_TO_WANDB = True
     # DP
     USE_GEP = True
     ADD_DP_NOISE = True
@@ -48,13 +49,14 @@ class Config:
     INTERNAL_BENCHMARK = False
     PLOT_GRADS = False
     DATA_SCALE = 1.0
-    DATA_NOISE_SCALE = 0 * DATA_SCALE
+    USER_BIAS_SCALE = 0.1 * DATA_SCALE
+    DATA_NOISE_SCALE = 0.1 * DATA_SCALE
     DATA_DIM = 2
     HIDDEN_DIM = 2
     OUTPUT_DIM = 2
     GEP_PUBLIC_DATA_SIZE = 100
-    PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 10
-
+    PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 20
+    GLOBAL_LEARNING_RATE = (PRIVATE_TRAIN_DATA_SIZE / BATCH_SIZE) * LEARNING_RATE
     @staticmethod
     def to_dict() -> dict:
         members = inspect.getmembers(Config, lambda a: not (inspect.isroutine(a)))
