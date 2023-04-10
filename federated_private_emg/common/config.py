@@ -9,9 +9,10 @@ class Config:
     # DEVICE = 'cpu'
     USE_GROUPNORM = False
     USE_DROPOUT = False
-    DEVICE = 'cpu'
+    DEVICE = 'cuda'
     BATCH_SIZE = 256
     NUM_EPOCHS = 1000
+    EARLY_STOP_INCREASING_LOSS_COUNT = 10
     NUM_WORKERS = 2
     OPTIMIZER_TYPE = 'sgd'
     LEARNING_RATE = 0.001
@@ -38,8 +39,8 @@ class Config:
     DP_SIGMA = 1.0 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 0.05 #50
-    GEP_CLIP1 = 0.01 #20
+    GEP_CLIP0 = 0.5 #50
+    GEP_CLIP1 = 0.1 #20
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 3
 

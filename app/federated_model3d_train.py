@@ -38,8 +38,11 @@ def main():
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         config_dict = Config.to_dict()
-        config_dict.update(USERS_BIASES)
-        config_dict.update(USERS_VARIANCES)
+        users = train_user_list + validation_user_list + test_user_list
+        for u in users:
+            config_dict[f'user_{u}_bias'] = USERS_BIASES[u]
+        for u in users:
+            config_dict[f'user_{u}_variance'] = USERS_VARIANCES[u]
         config_dict.update({'train_user_list': train_user_list,
                             'validation_user_list': validation_user_list,
                             'test_user_list': test_user_list})
@@ -59,6 +62,7 @@ def single_train():
     #                 use_group_norm=True,
     #                 output_info_fn=logger.info,
     #                 output_debug_fn=logger.debug)
+
     if Config.TOY_STORY:
         model = torch.nn.Sequential(
             torch.nn.Flatten(start_dim=1, end_dim=-1),

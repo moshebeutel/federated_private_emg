@@ -23,11 +23,11 @@ def create_public_dataset(public_users: str or list[str]):
     if Config.TOY_STORY:
         if not isinstance(public_users, list):
             public_users = [public_users]
-        public_user_input_list, public_user_targets_list = [],[]
+        public_user_input_list, public_user_targets_list = [], []
         for u in public_users:
             bias = USERS_BIASES[u]
             variance = USERS_VARIANCES[u]
-            public_user_input, public_user_target =\
+            public_user_input, public_user_target = \
                 create_toy_data(data_size=Config.GEP_PUBLIC_DATA_SIZE, bias=bias, variance=variance)
             public_user_input_list.append(public_user_input)
             public_user_targets_list.append(public_user_target)
@@ -92,20 +92,16 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     num_clients = len(train_user_list)
 
     device = next(model.parameters()).device
-    # model.train()
-    #
-    # for p in model.parameters():
-    #     p.grad = torch.zeros_like(p)
-    # optimizer = torch.optim.SGD(model.parameters(), lr=Config.LEARNING_RATE, weight_decay=Config.WEIGHT_DECAY,
-    #                             momentum=0.9)
+
     optimizer.zero_grad()
 
     # pbar = tqdm(enumerate(train_user_list), desc='Iteration loop')
     # for i, u in pbar:
     for i, u in enumerate(train_user_list):
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
-        test_loader, validation_loader, train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
-                                                                         output_fn=output_fn)
+
+        train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'],
+                                         output_fn=output_fn)
         local_model = copy.deepcopy(model).to(device)
 
         assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
@@ -136,9 +132,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                                             loader=train_loader, criterion=loss_fn,
                                             batch_size=train_params.batch_size,
                                             gep=gep if Config.USE_GEP else None)
-            # print("torch.cuda.memory_allocated: %fGB" % (torch.cuda.memory_allocated(0) / 1024 / 1024 / 1024))
-            # print("torch.cuda.memory_reserved: %fGB" % (torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024))
-            # print("torch.cuda.max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
+
             print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
             if Config.WRITE_TO_WANDB:
                 wandb.log({
@@ -176,6 +170,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                 lr=Config.GLOBAL_LEARNING_RATE * len(train_user_list),
                                 weight_decay=Config.WEIGHT_DECAY,
                                 momentum=0.9)
+
+    best_loss = 100000
+    loss_increase_count = 0
+
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
     for epoch in range(num_epochs):
         model.train()
@@ -197,7 +195,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                                   output_fn=lambda s: None)
             loss, acc = run_single_epoch(TrainObjects(loader=validation_loader, model=model, criterion=loss_fn),
                                          train_params=eval_params)
-
+            print(f'User {u} Validation Loss', loss)
             if log2wandb:
                 wandb.log({
                     f'User {u} Validation Loss': loss
@@ -209,6 +207,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
+
         print(f'federated global epoch {epoch} '
               f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
               f'val set loss {val_loss} val set acc {val_acc}')
@@ -221,13 +220,22 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 # 'epoch_validation_acc': val_acc,
             })
 
+        if val_loss < best_loss:
+            best_loss = val_loss
+            loss_increase_count = 0
+        else:
+            loss_increase_count += 1
+
+        if loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
+            break
+
     # Test Eval
     test_loss, test_acc = 0, 0
     for u in test_user_list:
         test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
                                         datasets=['test'],
                                         output_fn=lambda s: None)
-        train_objects = TrainObjects(model=model, loader=test_loader)
+        train_objects = TrainObjects(model=model, loader=test_loader, criterion=loss_fn)
         loss, acc = run_single_epoch(train_objects=train_objects, train_params=eval_params)
         test_loss += loss / len(test_user_list)
         test_acc += acc / len(test_user_list)
