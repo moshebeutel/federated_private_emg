@@ -34,10 +34,24 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
-USERS_BIASES = {user: bias for (user, bias)
-                in zip(FULL_USER_LIST, (Config.USER_BIAS_SCALE * torch.randn(size=(len(FULL_USER_LIST),))).tolist())}
-USERS_VARIANCES = {user: variance for (user, variance)
-                   in zip(FULL_USER_LIST, (Config.DATA_NOISE_SCALE * torch.randn(size=(len(FULL_USER_LIST),))).tolist())}
+if Config.TOY_STORY:
+    train_user_list = [('%d' % i).zfill(3) for i in range(1, 101)]
+    public_users = [('%d' % i).zfill(3) for i in range(1, 11)]
+    validation_user_list = [('%d' % i).zfill(3) for i in range(101, 111)]
+    test_user_list = [('%d' % i).zfill(3) for i in range(111, 121)]
+
+else:
+    public_users = ['04']
+    train_user_list = ['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
+    validation_user_list = ['22', '23', '47']
+    test_user_list = ['07', '12', '48']
+
+all_users_list = train_user_list + validation_user_list + test_user_list
+USERS_BIASES = {user: bias for (user, bias) in
+                zip(all_users_list, (Config.USER_BIAS_SCALE * torch.randn(size=(len(all_users_list),))).tolist())}
+USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
+                                                              (Config.DATA_NOISE_SCALE * torch.randn(
+                                                                  size=(len(all_users_list),))).tolist())}
 
 
 class SimpleGlobalCounter:
@@ -202,7 +216,7 @@ def create_toy_data(data_size: int, bias: float = 0.0, variance: float = Config.
 
 def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
     if Config.TOY_STORY:
-        u = datasets_folder_name[-2:]
+        u = datasets_folder_name[-3:]
         bias = USERS_BIASES[u]
         variance = USERS_VARIANCES[u]
         # print(f'Create toy data for user {u} who has bias {bias} and variance {variance}')

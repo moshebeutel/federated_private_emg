@@ -11,7 +11,7 @@ class Config:
     USE_GROUPNORM = False
     USE_DROPOUT = False
     DEVICE = 'cpu'
-    BATCH_SIZE = 64
+    BATCH_SIZE = 256
     NUM_EPOCHS = 1000
     EARLY_STOP_INCREASING_LOSS_COUNT = 10
     NUM_WORKERS = 2
@@ -31,7 +31,7 @@ class Config:
     WRITE_TO_WANDB = False
 
     # FL
-    NUM_CLIENT_AGG = 7
+    NUM_CLIENT_AGG = 10
     NUM_INTERNAL_EPOCHS = 1
 
 
@@ -58,12 +58,12 @@ class Config:
     DP_SIGMA = 0.0  # sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # TOY STORY
-    TOY_STORY = False
+    TOY_STORY = True
     INTERNAL_BENCHMARK = False
     PLOT_GRADS = False
     DATA_SCALE = 10.0
     USER_BIAS_SCALE = 0.0 * DATA_SCALE
-    DATA_NOISE_SCALE = 0.0 * DATA_SCALE
+    DATA_NOISE_SCALE = 10.0 * DATA_SCALE
     DATA_DIM = 20
     HIDDEN_DIM = 20
     OUTPUT_DIM = 2

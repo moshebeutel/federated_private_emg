@@ -6,28 +6,14 @@ from torch import nn
 
 import wandb
 from common import utils
-from common.utils import USERS_BIASES, USERS_VARIANCES
+from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
+    test_user_list
 from differential_privacy.params import DpParams
-from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, FlattenToLinear, PadBeforeLast, Squeeze
-from federated_private_emg.fed_priv_models.model3d import Model3d
+from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, PadBeforeLast, Squeeze
 from train.federated_utils import federated_train_model, attach_gep, create_public_dataset
 from train.params import TrainParams
 from common.config import Config
 from functools import *
-
-# public_users = ['04', '13', '35', '08']
-public_users = ['04']
-# train_user_list = ['03', '05', '06', '09', '11', '14', '16',
-#                    '17', '18', '19', '25', '26', '27', '29',
-#                    '33', '34', '36', '38',
-#                    '04', '13', '35', '08', '15', '24', '30', '31', '39',
-#                    '42', '43', '45', '46']
-# train_user_list=['04', '13', '35']
-train_user_list=['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
-# train_user_list=['04']
-validation_user_list = ['22', '23', '47']
-# validation_user_list=['04']
-test_user_list = ['07', '12', '48']
 
 
 def main():
@@ -153,7 +139,6 @@ def single_train():
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
     if Config.USE_GEP:
-
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
         attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
