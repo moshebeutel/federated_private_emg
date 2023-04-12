@@ -38,9 +38,6 @@ def create_public_dataset(public_users: str or list[str]):
                                                                                                       str) else \
             [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
         public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['validation'])
-        # public_data = list(public_loader)
-        # public_inputs = torch.vstack([i[0] for i in public_data])
-        # public_targets = torch.vstack([i[1] for i in public_data])
         public_inputs, public_targets = next(iter(public_loader))
         public_targets = labels_to_consecutive(public_targets).squeeze().long()
         print('public data shape', public_inputs.shape, public_targets.shape)
@@ -115,23 +112,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                                          output_fn=output_fn)
         local_model = copy.deepcopy(model).to(device)
 
-        # assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
-        #     f'USE_GEP = {Config.USE_GEP} but ' \
-        #     f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
-        # if Config.USE_GEP:
-        #     local_model, loss_fn, gep = attach_gep_to_model_fn(local_model)
         local_optimizer = torch.optim.SGD(local_model.parameters(), lr=Config.LEARNING_RATE,
                                           weight_decay=Config.WEIGHT_DECAY, momentum=0.9)
         local_model.train()
-        # local_optimizer.zero_grad()
-        # for p in local_model.parameters():
-        #     p.grad = torch.zeros_like(p)
-
-        # if i % Config.NUM_CLIENT_AGG == 0:
-
-        # if Config.USE_GEP:
-        #     local_optimizer.zero_grad()
-        #     gep.get_anchor_space(local_model, loss_func=loss_fn)
 
         user_loss, user_acc = 0.0, 0.0
 
@@ -166,30 +149,15 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
         del local_model
 
-        # if i % Config.NUM_CLIENT_AGG == (Config.NUM_CLIENT_AGG - 1):
-        #     for p in model.parameters():
-        #         # average grads
-        #         p.grad /= Config.NUM_CLIENT_AGG
-
         # pbar.set_description(f"Iteration {i}. User {u}. Epoch running loss {epoch_train_loss}."
         #                      f" Epoch running acc {epoch_train_acc}")
-    # for n, p in model.named_parameters():
-    #     # print(n, p.grad, p.grad_batch)
-    #     print(n)
-    #     print(p.grad_batch.mean(dim=0))
+
     if Config.USE_GEP:
         assert Config.USE_SGD_DP is False, 'Use GEP or SGD_DP. Not both'
         gep_batch(accumulated_grads=None, gep=gep, model=model, batchsize=num_clients_in_epoch)
     elif Config.ADD_DP_NOISE:
         sgd_dp_batch(model=model, batchsize=num_clients_in_epoch)
-    # for n,p in model.named_parameters():
-    #     print(n)
-    #     grad_norm = torch.linalg.norm(p.grad)
-    #     grad_batch_mean = p.grad_batch.mean(dim=0)
-    #     grad_batch_norm = torch.linalg.norm(grad_batch_mean)
-    #     grad_diff_norm = torch.linalg.norm(p.grad - grad_batch_mean)
-    #     grad_diff_norm_ratio = grad_diff_norm / grad_norm
-    #     print(grad_norm, grad_batch_norm, grad_diff_norm, grad_diff_norm_ratio)
+
     optimizer.step()
     return epoch_train_loss, epoch_train_acc, model
 
@@ -224,7 +192,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                          train_params=internal_train_params,
                                          dp_params=dp_params,
                                          gep=gep)
-        # attach_gep_to_model_fn=attach_gep_to_model_fn)
 
         model.eval()
         val_loss, val_acc = 0, 0

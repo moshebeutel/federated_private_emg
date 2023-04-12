@@ -25,8 +25,8 @@ import matplotlib.pyplot as plt
 
 
 def sgd_dp_batch(model, batchsize):
-
-    grad_norm_list = torch.zeros(batchsize).cuda()
+    device = next(model.parameters()).device
+    grad_norm_list = torch.zeros(batchsize).to(device)
     for p in model.parameters():
         flat_g = p.grad_batch.reshape(batchsize, -1)
         current_norm_list = torch.norm(flat_g, dim=1)
@@ -39,7 +39,7 @@ def sgd_dp_batch(model, batchsize):
         flat_g = torch.div(flat_g, grad_norm_list.reshape(-1, 1))
         p.grad_batch = flat_g.reshape(batchsize, *p.shape)
         p.grad = torch.mean(p.grad_batch, dim=0)
-        # del p.grad_batch
+        del p.grad_batch
         # Add DP noise to gradients
         noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C, size=p.grad.size(), device=p.device) / batchsize
         p.grad += noise
@@ -104,22 +104,25 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         batch = (t.to(device) for t in batch)
         emg, labels = batch
 
-        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).squeeze()
+        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).long().squeeze()
 
         optimizer.zero_grad()
         outputs = model(emg.float())
         loss = criterion(outputs, labels)
-        del outputs
 
         running_loss += float(loss)
 
+        # print('running_loss', running_loss)
         if Config.TOY_STORY:
             pass
         else:
             _, predicted = torch.max(outputs.data, 1)
+            # print('predicted', predicted)
             correct = (predicted == labels).sum().item()
+            # print('correct', correct)
             correct_counter += int(correct)
             del predicted
+        del outputs
 
         if Config.USE_GEP:
             with backpack(BatchGrad()):
@@ -153,12 +156,23 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                 assert bn in bench_grads_plot_list.keys()
                 bench_grads_plot_list[bn].append(bp.grad.data.detach())
 
+        # print('Before Step')
+        # with torch.no_grad():
+        #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+        #         diff = p.data - bp.data
+        #         print(diff.abs().max())
+        #         print(p.grad.abs().max())
         optimizer.step()
+        # print('After Step')
+        # with torch.no_grad():
+        #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+        #         diff = p.data - bp.data
+        #         print(diff.abs().max())
+        #         print(p.grad.abs().max())
 
         if Config.INTERNAL_BENCHMARK:
             bench_optimizer.step()
 
-        # print('After Step')
         if Config.TOY_STORY and Config.PLOT_GRADS:
             losses.append(float(loss))
             del loss
@@ -297,7 +311,7 @@ def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad
 
     outputs = model(inputs.float())
     loss = criterion(outputs, labels.long())
-    _, predicted = None, 0 if Config.TOY_STORY else torch.max(outputs.data, 1)
+    _, predicted = (None, 0) if Config.TOY_STORY else torch.max(outputs.data, 1)
     if model.training:
         loss.backward()
         if grad_step_now:

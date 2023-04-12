@@ -11,8 +11,8 @@ from common.utils import config_logger
 # from putemg_features import biolab_utilities
 
 
-DATA_DIR = '/home/user1/data/datasets/putEMG'  # '../data/reduced_dataframes'
-UNIFIED_DATA_DIR = '../data/unified_dataframes'
+DATA_DIR = '/home/moshe/GIT/federated_private_emg/data/Data-HDF5' # '/home/user1/data/datasets/putEMG'  # '../data/reduced_dataframes'
+UNIFIED_DATA_DIR = '../data/unified_dataframes/every10'
 READ_EVERY = 10
 NUM_USERS = len(utils.FULL_USER_LIST)
 
