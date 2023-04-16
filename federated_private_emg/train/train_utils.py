@@ -10,7 +10,6 @@ import torch
 import wandb
 from backpack import backpack
 from backpack.extensions import BatchGrad
-from memory_profiler import profile
 from tqdm import tqdm
 
 # from common.config import Config
@@ -105,12 +104,13 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         batch = (t.to(device) for t in batch)
         emg, labels = batch
 
-        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).long().squeeze()
+        labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).long().squeeze()
 
         optimizer.zero_grad()
         outputs = model(emg.float())
+        # print('outputs.shape', outputs.shape)
         loss = criterion(outputs, labels)
-
+        # print('loss', loss)
         running_loss += float(loss)
 
         # print('running_loss', running_loss)
@@ -120,7 +120,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
             _, predicted = torch.max(outputs.data, 1)
             # print('predicted', predicted)
             correct = (predicted == labels).sum().item()
-            # print('correct', correct)
+            # print('correct', correct, ' out of ', predicted.shape)
             correct_counter += int(correct)
             del predicted
         del outputs
@@ -130,6 +130,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                 loss.backward()
         else:
             loss.backward()
+        # print('after backward')
 
         if Config.INTERNAL_BENCHMARK:
             bench_optimizer.zero_grad()
@@ -177,7 +178,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
 
         if Config.TOY_STORY and Config.PLOT_GRADS:
             losses.append(float(loss))
-            del loss
+
             if Config.INTERNAL_BENCHMARK:
                 bench_losses.append(float(bench_loss))
                 del bench_loss
@@ -191,7 +192,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                     bench_params_plot_list[bn].append(bp.data.detach() - bench_params_plot_list[bn][-1])
                     # bench_params_plot_list[bn].append(bp.data.detach())
 
-        del labels, emg, batch
+        del labels, emg, batch, loss
 
         # Release GPU and CPU memory - or at least try to ;)
         torch.cuda.empty_cache()
@@ -282,7 +283,9 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
     # print('target_grad', target_grad, torch.linalg.norm(target_grad))
     # # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
     # print('clean_grad', clean_grad, torch.linalg.norm(clean_grad))
-    noisy_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+    noisy_grad = gep.get_approx_grad(clipped_theta)
+    if Config.GEP_USE_RESIDUAL:
+        noisy_grad += residual_grad
     # print('noisy_grad', noisy_grad, torch.linalg.norm(noisy_grad))
 
     offset = 0
@@ -326,8 +329,8 @@ def dp_sgd_fwd_bwd(inputs, labels, model, criterion, optimizer, dp_params, zero_
     floss = float(loss)
     del loss, outputs
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    # if torch.cuda.is_available():
+    #     torch.cuda.empty_cache()
     return predicted, float(floss)
 
 
@@ -350,7 +353,8 @@ def run_single_epoch(model, loader, criterion,
 
     for k, batch in enumerate(loader):
         curr_batch_size = batch[1].size(0)
-        if curr_batch_size < batch_size:
+
+        if batch_size > 0 and curr_batch_size < batch_size:
             continue
         counter += 1
 
@@ -358,7 +362,7 @@ def run_single_epoch(model, loader, criterion,
         batch = (t.to(device) for t in batch)
         inputs, labels = batch
 
-        labels = labels if Config.TOY_STORY else labels_to_consecutive(labels).squeeze()
+        labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).squeeze()
 
         grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
@@ -374,9 +378,12 @@ def run_single_epoch(model, loader, criterion,
         y_pred += ([] if Config.TOY_STORY else predicted.cpu().tolist())
         y_labels += labels.cpu().tolist()
         del labels, inputs, batch
-    loss = running_loss / float(counter)
-    acc = 100 * correct_counter / sample_counter
-    return loss, acc
+
+
+    # epoch_loss = running_loss / float(counter)
+    epoch_loss = running_loss / float(sample_counter)
+    epoch_acc = 100 * correct_counter / float(sample_counter)
+    return epoch_loss, epoch_acc
 
 
 def train_model(train_objects: TrainObjects,

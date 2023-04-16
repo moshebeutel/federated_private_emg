@@ -1,4 +1,5 @@
 # Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
+import gc
 
 import numpy as np
 import torch
@@ -7,6 +8,7 @@ import torch.nn as nn
 from backpack import backpack
 from backpack.extensions import BatchGrad
 
+from common.config import Config
 from common.utils import flatten_tensor
 
 
@@ -25,8 +27,8 @@ def orthogonalize(matrix):
 
 
 def clip_column(tsr, clip=1.0, inplace=True):
-    if (inplace):
-        if torch.cuda.is_available():
+    if inplace:
+        if torch.cuda.is_available() and Config.DEVICE == 'cuda':
             inplace_clipping(tsr, torch.tensor(clip).cuda())
         else:
             inplace_clipping(tsr, torch.tensor(clip))
@@ -63,6 +65,7 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_p = pub_grad.shape[1]
 
     num_bases = min(num_bases, num_p)
+    # print(pub_grad.shape[1], num_bases)
     L = torch.normal(0, 1.0, size=(pub_grad.shape[1], num_bases), device=pub_grad.device)
     for i in range(power_iter):
         R = torch.matmul(pub_grad, L)  # n x k
@@ -110,8 +113,9 @@ class GEP(nn.Module):
 
     def get_anchor_gradients(self, net, loss_func):
         # print('get_anchor_gradient')
-
+        device = next(net.parameters()).device
         for inputs, targets in self.loader:
+            inputs, targets = inputs.to(device), targets.to(device)
             outputs = net(inputs)
             loss = loss_func(outputs.cpu(), targets.cpu())
             with backpack(BatchGrad()):
@@ -125,6 +129,8 @@ class GEP(nn.Module):
                 cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
                 del p.grad_batch
 
+        gc.collect()
+
         return flatten_tensor(cur_batch_grad_list)
 
     # @profile
@@ -136,11 +142,8 @@ class GEP(nn.Module):
         # print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
         with torch.no_grad():
             num_param_list = self.num_param_list
-            num_anchor_grads = anchor_grads.shape[0]
-            num_group_p = len(num_param_list)
 
             selected_bases_list = []
-            num_bases_list = []
             pub_errs = []
 
             sqrt_num_param_list = np.sqrt(np.array(num_param_list))
@@ -149,7 +152,6 @@ class GEP(nn.Module):
             num_bases_list = self.num_bases * sqrt_num_param_list
             num_bases_list = num_bases_list.astype(np.int)
 
-            total_p = 0
             offset = 0
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
@@ -171,8 +173,10 @@ class GEP(nn.Module):
             # print('self.selected_bases_list', self.selected_bases_list)
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
-            del pub_errs, num_bases_list
+            del pub_errs, num_bases_list, selected_bases_list
+            gc.collect()
         del anchor_grads
+        gc.collect()
 
     # @profile
     def forward(self, target_grad, logging=False):

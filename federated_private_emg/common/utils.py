@@ -7,17 +7,19 @@ import re
 import sys
 import time
 import typing
+from collections import defaultdict
 from datetime import datetime
 from math import sqrt, pow
+import random
 
 import numpy as np
 import pandas as pd
 import torch
-if Config.CFAR10_DATA:
+from common.config import Config
+
+if Config.CIFAR10_DATA:
     from torchvision.datasets import CIFAR10
     from torchvision.transforms import transforms
-
-from common.config import Config
 
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
 FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
@@ -34,12 +36,11 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
-if Config.TOY_STORY:
-    train_user_list = [('%d' % i).zfill(3) for i in range(1, 201)]
-    public_users = [('%d' % i).zfill(3) for i in range(1, 33)]
-    validation_user_list = [('%d' % i).zfill(3) for i in range(201, 211)]
-    test_user_list = [('%d' % i).zfill(3) for i in range(211, 221)]
-
+if Config.TOY_STORY or Config.CIFAR10_DATA:
+    train_user_list = [('%d' % i).zfill(3) for i in range(1, 51)]
+    public_users = [('%d' % i).zfill(3) for i in range(1, 51)]
+    validation_user_list = [('%d' % i).zfill(3) for i in range(51, 56)]
+    test_user_list = [('%d' % i).zfill(3) for i in range(56, 61)]
 else:
     public_users = ['04', '13']
     train_user_list = ['04', '13', '35', '08']
@@ -52,6 +53,33 @@ USERS_BIASES = {user: bias for (user, bias) in
 USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
                                                               (Config.DATA_NOISE_SCALE * torch.rand(
                                                                   size=(len(all_users_list),))).tolist())}
+if Config.CIFAR10_DATA:
+    normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    transform = transforms.Compose([transforms.ToTensor(), normalization])
+    dataset = CIFAR10(
+        root=Config.CIFAR10_DATASET_DIR,
+        train=True,
+        download=True,
+        transform=transform
+    )
+
+    test_set = CIFAR10(
+        root=Config.CIFAR10_DATASET_DIR,
+        train=False,
+        download=True,
+        transform=transform
+    )
+
+    val_size = len(test_set)  # 10000
+    train_size = len(dataset) - val_size
+    train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
+    CIFAR10_TRAIN_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=True)
+    CIFAR10_VALIDATION_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=False)
+    CIFAR10_TEST_LOADER = torch.utils.data.DataLoader(test_set, batch_size=Config.BATCH_SIZE, shuffle=False)
+    CIFAR10_LOADERS = {'train': CIFAR10_TRAIN_LOADER, 'validation': CIFAR10_VALIDATION_LOADER,
+                       'test': CIFAR10_TEST_LOADER}
+
+    CIFAR10_USER_LOADERS = {}
 
 
 class SimpleGlobalCounter:
@@ -214,48 +242,36 @@ def create_toy_data(data_size: int, bias: float = 0.0, variance: float = Config.
     return X, y
 
 
-def create_cfar_data(datasize, dataset: str):
+def create_cifar_data(datasize, dataset: str):
+    raise Exception
+    assert dataset in ['train', 'validation', 'test'], 'dataset arguemt should be one of [train, validation, test]'
 
-    normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+    num_batches = int(datasize / Config.BATCH_SIZE)
+    assert dataset in CIFAR10_LOADERS, 'No cifar loader for ' + dataset
+    loader = CIFAR10_LOADERS[dataset]
+    X_list, y_list = [], []
+    for _ in range(num_batches):
+        X, y = next(iter(loader))
+        X_list.append(X)
+        y_list.append(y.unsqueeze(dim=1))
+    del loader
 
-    trans = [transforms.ToTensor()]
-
-    trans.append(normalization)
-
-    transform = transforms.Compose(trans)
-
-    dataset = CIFAR10(
-        Config.CFAR10_DATA,
-        train=True,
-        download=True,
-        transform=transform
-    )
-
-    test_set = CIFAR10(
-        Config.CFAR10_DATA,
-        train=False,
-        download=True,
-        transform=transform
-    )
-
-    train_size = 0.9 * datasize
-    val_size = 0.1 * datasize # 10000
-    # train_size = len(dataset) - val_size
-    train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
-
-    return train_set, val_set, test_set
+    return torch.vstack(X_list), torch.vstack(y_list).squeeze()
 
 
-def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[], dataset='train'):
+def load_datasets(datasets_folder_name, x_filename, y_filename, datasize=-1, dataset='train', exclude_labels=[]):
     if Config.TOY_STORY:
         u = datasets_folder_name[-3:]
         bias = USERS_BIASES[u]
         variance = USERS_VARIANCES[u]
         # print(f'Create toy data for user {u} who has bias {bias} and variance {variance}')
-        X, y = create_toy_data(data_size=Config.PRIVATE_TRAIN_DATA_SIZE, bias=bias, variance=variance)
-    elif Config.CFAR10_DATA:
+        assert datasize > 0
+        X, y = create_toy_data(data_size=datasize, bias=bias, variance=variance)
+    elif Config.CIFAR10_DATA:
         u = datasets_folder_name[-3:]
-        X, y = create_cfar_data(datasize=Config.PRIVATE_TRAIN_DATA_SIZE, dataset=dataset)
+        assert datasize > 0
+        X, y = create_cifar_data(datasize=datasize, dataset=dataset)
+        # print(X.shape, y.shape)
     else:
         if isinstance(datasets_folder_name, str):
             datasets_folder_name = [datasets_folder_name]
@@ -288,6 +304,7 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
 
 
 def init_data_loaders(datasets_folder_name,
+                      datasize=-1,
                       datasets=['train', 'validation', 'test'],
                       batch_size=Config.BATCH_SIZE,
                       num_workers=Config.NUM_WORKERS,
@@ -295,19 +312,25 @@ def init_data_loaders(datasets_folder_name,
     loaders = []
     assert datasets, 'Given empty datasets list'
     for dataset in datasets:
-        X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt')
-        if not Config.TOY_STORY:
-            assert_loaded_datasets(X, y)
-        output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
-        loader = torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(X, y),
-            shuffle=True if dataset == 'train' else False,
-            batch_size=batch_size,
-            num_workers=num_workers
-        )
+        if Config.CIFAR10_DATA:
+            u = datasets_folder_name[-3:]
+            loader = CIFAR10_USER_LOADERS[u][dataset]
+        else:
+            X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt',
+                                 datasize=datasize)
+            if not Config.TOY_STORY and not Config.CIFAR10_DATA:
+                assert_loaded_datasets(X, y)
+            output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
+            loader = torch.utils.data.DataLoader(
+                torch.utils.data.TensorDataset(X, y),
+                shuffle=True if dataset == 'train' else False,
+                batch_size=batch_size,
+                num_workers=num_workers
+            )
+            del X, y
         loaders.append(loader)
         output_fn(f'Created {dataset} loader. Len = {len(loader)}')
-        del X, y
+
 
     assert len(loaders) == len(datasets), f'Given {len(datasets)}, Created {len(loaders)} loaders'
     return tuple(loaders) if len(loaders) > 1 else loaders[0]
@@ -339,3 +362,144 @@ def flatten_tensor(tensor_list):
     flatten_param = torch.cat(tensor_list, dim=1)
     del tensor_list
     return flatten_param
+
+
+def get_num_classes_samples(dataset):
+    """
+    Taken from https://github.com/AvivSham/pFedHN.git
+
+
+    extracts info about certain dataset
+    :param dataset: pytorch dataset object
+    :return: dataset info number of classes, number of samples, list of labels
+    """
+    # ---------------#
+    # Extract labels #
+    # ---------------#
+    if isinstance(dataset, torch.utils.data.Subset):
+        if isinstance(dataset.dataset.targets, list):
+            data_labels_list = np.array(dataset.dataset.targets)[dataset.indices]
+        else:
+            data_labels_list = dataset.dataset.targets[dataset.indices]
+    else:
+        if isinstance(dataset.targets, list):
+            data_labels_list = np.array(dataset.targets)
+        else:
+            data_labels_list = dataset.targets
+    classes, num_samples = np.unique(data_labels_list, return_counts=True)
+    num_classes = len(classes)
+    return num_classes, num_samples, data_labels_list
+
+
+def gen_classes_per_node(dataset, num_users, classes_per_user=2, high_prob=0.6, low_prob=0.4):
+    """
+    Taken from https://github.com/AvivSham/pFedHN.git
+
+
+    creates the data distribution of each client
+    :param dataset: pytorch dataset object
+    :param num_users: number of clients
+    :param classes_per_user: number of classes assigned to each client
+    :param high_prob: highest prob sampled
+    :param low_prob: lowest prob sampled
+    :return: dictionary mapping between classes and proportions, each entry refers to other client
+    """
+    num_classes, num_samples, _ = get_num_classes_samples(dataset)
+
+    # -------------------------------------------#
+    # Divide classes + num samples for each user #
+    # -------------------------------------------#
+    # assert (classes_per_user * num_users) % num_classes == 0, "equal classes appearance is needed"
+    count_per_class = (classes_per_user * num_users) // num_classes + 1
+    class_dict = {}
+    for i in range(num_classes):
+        # sampling alpha_i_c
+        probs = np.random.uniform(low_prob, high_prob, size=count_per_class)
+        # normalizing
+        probs_norm = (probs / probs.sum()).tolist()
+        class_dict[i] = {'count': count_per_class, 'prob': probs_norm}
+
+    # -------------------------------------#
+    # Assign each client with data indexes #
+    # -------------------------------------#
+    class_partitions = defaultdict(list)
+    for i in range(num_users):
+        c = []
+        for _ in range(classes_per_user):
+            class_counts = [class_dict[i]['count'] for i in range(num_classes)]
+            max_class_counts = np.where(np.array(class_counts) == max(class_counts))[0]
+            c.append(np.random.choice(max_class_counts))
+            class_dict[c[-1]]['count'] -= 1
+        class_partitions['class'].append(c)
+        class_partitions['prob'].append([class_dict[i]['prob'].pop() for i in c])
+    return class_partitions
+
+
+def gen_data_split(dataset, num_users, class_partitions):
+    """
+    Taken from https://github.com/AvivSham/pFedHN.git
+
+
+    divide data indexes for each client based on class_partition
+    :param dataset: pytorch dataset object (train/val/test)
+    :param num_users: number of clients
+    :param class_partitions: proportion of classes per client
+    :return: dictionary mapping client to its indexes
+    """
+    num_classes, num_samples, data_labels_list = get_num_classes_samples(dataset)
+
+    # -------------------------- #
+    # Create class index mapping #
+    # -------------------------- #
+    data_class_idx = {i: np.where(data_labels_list == i)[0] for i in range(num_classes)}
+
+    # --------- #
+    # Shuffling #
+    # --------- #
+    for data_idx in data_class_idx.values():
+        random.shuffle(data_idx)
+
+    # ------------------------------ #
+    # Assigning samples to each user #
+    # ------------------------------ #
+    user_data_idx = [[] for i in range(num_users)]
+    for usr_i in range(num_users):
+        for c, p in zip(class_partitions['class'][usr_i], class_partitions['prob'][usr_i]):
+            end_idx = int(num_samples[c] * p)
+            user_data_idx[usr_i].extend(data_class_idx[c][:end_idx])
+            data_class_idx[c] = data_class_idx[c][end_idx:]
+
+    return user_data_idx
+
+
+def gen_random_loaders(num_users, bz, classes_per_user):
+    """
+    Taken from https://github.com/AvivSham/pFedHN.git
+
+
+
+
+    generates train/val/test loaders of each client
+
+    :param num_users: number of clients
+    :param bz: batch size
+    :param classes_per_user: number of classes assigned to each client
+    :return: train/val/test loaders of each client, list of pytorch dataloaders
+    """
+    loader_params = {"batch_size": bz, "shuffle": False, "pin_memory": True, "num_workers": 0}
+    dataloaders = []
+    # datasets = get_datasets(data_name, data_path, normalize=True)
+    datasets = [train_set, val_set, test_set]
+    for i, d in enumerate(datasets):
+        # ensure same partition for train/test/val
+        if i == 0:
+            # train set
+            cls_partitions = gen_classes_per_node(d, num_users, classes_per_user)
+            loader_params['shuffle'] = True
+        usr_subset_idx = gen_data_split(d, num_users, cls_partitions)
+        # create subsets for each client
+        subsets = list(map(lambda x: torch.utils.data.Subset(d, x), usr_subset_idx))
+        # create dataloaders from subsets
+        dataloaders.append(list(map(lambda x: torch.utils.data.DataLoader(x, **loader_params), subsets)))
+
+    return dataloaders

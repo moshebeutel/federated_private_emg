@@ -94,7 +94,7 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
                num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor):
     device = next(net.parameters()).device
     # print('\n==> Creating GEP class instance')
-    gep = GEP(num_bases, batch_size, clip0, clip1, power_iter).cuda()
+    gep = GEP(num_bases, batch_size, clip0, clip1, power_iter)
     ## attach auxiliary data to GEP instance
     public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
     gep.public_inputs = public_inputs

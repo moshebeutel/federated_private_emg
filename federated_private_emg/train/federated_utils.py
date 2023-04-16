@@ -54,16 +54,25 @@ def create_public_dataset(public_users: str or list[str]):
         for u in public_users:
             print('Creating public data for:', u)
             user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
-            public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'])
+            public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name,
+                                              datasize=Config.GEP_PUBLIC_DATA_SIZE,  datasets=['train'])
             for _ in range(int(Config.GEP_PUBLIC_DATA_SIZE / Config.BATCH_SIZE)):
                 inputs, targets = next(iter(public_loader))
                 inputs = inputs.unsqueeze(dim=0)
                 public_inputs_list.append(inputs)
                 public_targets_list.append(targets)
+                del inputs, targets
+            del public_loader
+            gc.collect()
 
         public_inputs = torch.vstack(public_inputs_list)
         public_targets = torch.vstack(public_targets_list)
-        public_targets = labels_to_consecutive(public_targets).squeeze().long()
+
+        del public_inputs_list, public_targets_list
+        gc.collect()
+
+        public_targets = public_targets if Config.CIFAR10_DATA \
+            else labels_to_consecutive(public_targets).squeeze().long()
         # print('public data shape', public_inputs.shape, public_targets.shape)
         # print(public_inputs.shape, public_targets.shape)
         public_inputs = torch.swapdims(public_inputs, 0, 1)
@@ -105,6 +114,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
 
         train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'],
+                                         datasize=Config.PRIVATE_TRAIN_DATA_SIZE,
                                          output_fn=output_fn)
         local_model = copy.deepcopy(model).to(device)
 
@@ -175,7 +185,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                           log2wandb=False,
                           output_fn=lambda s: None):
     assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
-    eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
+    eval_params = TrainParams(epochs=1, batch_size=-1)
+    # eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=Config.GLOBAL_LEARNING_RATE * Config.NUM_CLIENT_AGG,
                                 weight_decay=Config.WEIGHT_DECAY,
@@ -206,6 +217,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         val_loss, val_acc = 0, 0
         for i,u in enumerate(validation_user_list):
             validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                                  datasize=Config.BATCH_SIZE * 4,
                                                   datasets=['validation'],
                                                   output_fn=lambda s: None)
             loss, acc = run_single_epoch(loader=validation_loader, model=model, criterion=loss_fn,
@@ -243,9 +255,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         if log2wandb:
             wandb.log({
                 'epoch_train_loss': epoch_train_loss,
-                # 'epoch_train_acc': epoch_train_acc,
+                'epoch_train_acc': epoch_train_acc,
                 'epoch_validation_loss': val_loss,
-                # 'epoch_validation_acc': val_acc,
+                'epoch_validation_acc': val_acc,
             })
 
         if val_loss < best_loss:
@@ -262,10 +274,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
     test_loss, test_acc = 0, 0
     for u in test_user_list:
         test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                        datasize=Config.BATCH_SIZE * 4,
                                         datasets=['test'],
                                         output_fn=lambda s: None)
-        train_objects = TrainObjects(model=model, loader=test_loader, criterion=loss_fn)
-        loss, acc = run_single_epoch(train_objects=train_objects, train_params=eval_params)
+        loss, acc = run_single_epoch(model=model, loader=test_loader, criterion=loss_fn, train_params=eval_params)
         test_loss += loss / len(test_user_list)
         test_acc += acc / len(test_user_list)
 

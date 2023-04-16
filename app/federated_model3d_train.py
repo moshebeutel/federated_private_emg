@@ -8,17 +8,19 @@ import wandb
 from common import utils
 from common.config import Config
 from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
-    test_user_list
+    test_user_list, gen_random_loaders
 from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
 from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, PadBeforeLast, Squeeze
 from train.federated_utils import federated_train_model, create_public_dataset
 from train.params import TrainParams
 
-def main():
-    print('USERS_BIASES', {u: '%.3f' % b for u, b in USERS_BIASES.items()})
 
-    print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
+def main():
+    if Config.TOY_STORY:
+        print('USERS_BIASES', {u: '%.3f' % b for u, b in USERS_BIASES.items()})
+
+        print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
 
     q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
 
@@ -27,7 +29,8 @@ def main():
         sigma1 = '%.3f' % Config.GEP_SIGMA1
         clip0 = '%.3f' % Config.GEP_CLIP0
         clip1 = '%.3f' % Config.GEP_CLIP1
-        exp_name = f'EMG GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+        # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users all public WITHOUT residual gradients'
         # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
     elif Config.USE_SGD_DP:
         dp_sigma = '%.3f' % Config.DP_SIGMA
@@ -68,6 +71,13 @@ def single_train():
             torch.nn.Flatten(start_dim=1, end_dim=-1),
             torch.nn.Linear(in_features=Config.DATA_DIM, out_features=Config.HIDDEN_DIM, bias=True),
             torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=Config.OUTPUT_DIM, bias=True))
+    elif Config.CIFAR10_DATA:
+        model = torch.nn.Sequential(
+            torch.nn.Flatten(start_dim=1, end_dim=-1),
+            torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
+            torch.nn.ReLU(),
+            torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=10, bias=True),
+            torch.nn.Softmax(dim=-1))
     else:
         # Model3d
         model = torch.nn.Sequential(torch.nn.Sequential(
@@ -138,6 +148,13 @@ def single_train():
     print(f'Model has {num_of_parameters} trainable parameters')
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
+
+    if Config.CIFAR10_DATA:
+        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE, classes_per_user=10)
+        utils.CIFAR10_USER_LOADERS = \
+            {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
+             for user, train_loader, validation_loader, test_loader in
+             zip(utils.all_users_list, loaders[0], loaders[1], loaders[2])}
     gep = None
     if Config.USE_GEP:
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
