@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import astuple
+from typing import Callable
+
 from backpack import backpack, extend
 from backpack.extensions import BatchGrad, BatchL2Grad
 import torch
@@ -9,6 +11,7 @@ from collections.abc import Callable
 from common.config import Config
 from common.utils import calc_grad_norm
 from differential_privacy.params import DpParams
+from fed_priv_models.gep import GEP
 
 
 def add_dp_noise(model,
@@ -84,3 +87,46 @@ def per_sample_gradient_fwd_bwd(inputs, labels, train_objects, dp_params, zero_g
                 add_dp_noise_using_per_sample(model, params=dp_params)
             optimizer.step()
     return predicted, float(loss)
+
+
+def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], num_bases: int,
+               batch_size: int, clip0: float, clip1: float, power_iter: int,
+               num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor):
+    device = next(net.parameters()).device
+    # print('\n==> Creating GEP class instance')
+    gep = GEP(num_bases, batch_size, clip0, clip1, power_iter).cuda()
+    ## attach auxiliary data to GEP instance
+    public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
+    gep.public_inputs = public_inputs
+    gep.public_targets = public_targets
+    gep.loader = torch.utils.data.DataLoader(
+            torch.utils.data.TensorDataset(public_inputs, public_targets),
+            shuffle=False,
+            batch_size=batch_size,
+            num_workers=Config.NUM_WORKERS
+        )
+
+    net = extend(net)
+
+    num_params = 0
+    np_list = []
+    for p in net.parameters():
+        num_params += p.numel()
+        np_list.append(p.numel())
+
+    def group_params(num_p, groups):
+        assert groups >= 1
+
+        p_per_group = num_p // groups
+        num_param_list = [p_per_group] * (groups - 1)
+        num_param_list = num_param_list + [num_p - sum(num_param_list)]
+        return num_param_list
+
+    # print(f'\n==> Dividing {num_params} parameters in to {num_groups} groups')
+    gep.num_param_list = group_params(num_params, num_groups)
+
+    gep.num_params = num_params
+
+    loss_fn = extend(loss_fn)
+
+    return net, loss_fn, gep

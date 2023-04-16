@@ -1,85 +1,81 @@
 import copy
+import gc
 import os
 import random
-from collections import OrderedDict
 
 import torch
 import wandb
-from tqdm import tqdm
 
 from common.config import Config
-from common.utils import DATA_COEFFS, init_data_loaders, calc_grad_norm, flatten_tensor, labels_to_consecutive, \
+from common.utils import init_data_loaders, labels_to_consecutive, \
     create_toy_data, USERS_BIASES, USERS_VARIANCES
 from differential_privacy.params import DpParams
+from fed_priv_models.gep import GEP
 from train.params import TrainParams
 from train.train_objects import TrainObjects
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
-from fed_priv_models.gep import GEP, extend
-import torch
-from collections.abc import Callable
 
 
 def create_public_dataset(public_users: str or list[str]):
+    print('Create public dataset for users:', public_users)
+    if not isinstance(public_users, list):
+        public_users = [public_users]
     if Config.TOY_STORY:
-        if not isinstance(public_users, list):
-            public_users = [public_users]
         public_user_input_list, public_user_targets_list = [], []
         for u in public_users:
             bias = USERS_BIASES[u]
             variance = USERS_VARIANCES[u]
             public_user_input, public_user_target = \
                 create_toy_data(data_size=Config.GEP_PUBLIC_DATA_SIZE, bias=bias, variance=variance)
+            # print(public_user_input.shape, public_user_target.shape)
+            public_user_input = public_user_input.unsqueeze(dim=0)
+            public_user_target = public_user_target.unsqueeze(dim=0)
+            # print(public_user_input.shape, public_user_target.shape)
             public_user_input_list.append(public_user_input)
             public_user_targets_list.append(public_user_target)
         public_inputs = torch.vstack(public_user_input_list)
         public_targets = torch.vstack(public_user_targets_list)
+        # print(public_inputs.shape, public_targets.shape)
+        public_inputs = torch.swapdims(public_inputs, 0, 1)
+        public_targets = torch.swapdims(public_targets, 0, 1)
+        # print(public_inputs.shape, public_targets.shape)
+
+        public_inputs = torch.vstack([public_inputs[i] for i in range(public_inputs.shape[0])])
+        public_targets = torch.vstack([public_targets[i] for i in range(public_targets.shape[0])])
+
+        # print(public_inputs.shape, public_targets.shape)
+
     else:
-        user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
-                                                                                                      str) else \
-            [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
-        public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['validation'])
-        public_inputs, public_targets = next(iter(public_loader))
+        # user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, public_users) if isinstance(public_users,
+        #                                                                                               str) else \
+        #     [os.path.join(Config.WINDOWED_DATA_DIR, pu) for pu in public_users]
+        # public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'])
+        public_inputs_list, public_targets_list = [], []
+        for u in public_users:
+            print('Creating public data for:', u)
+            user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
+            public_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'])
+            for _ in range(int(Config.GEP_PUBLIC_DATA_SIZE / Config.BATCH_SIZE)):
+                inputs, targets = next(iter(public_loader))
+                inputs = inputs.unsqueeze(dim=0)
+                public_inputs_list.append(inputs)
+                public_targets_list.append(targets)
+
+        public_inputs = torch.vstack(public_inputs_list)
+        public_targets = torch.vstack(public_targets_list)
         public_targets = labels_to_consecutive(public_targets).squeeze().long()
-        print('public data shape', public_inputs.shape, public_targets.shape)
+        # print('public data shape', public_inputs.shape, public_targets.shape)
+        # print(public_inputs.shape, public_targets.shape)
+        public_inputs = torch.swapdims(public_inputs, 0, 1)
+        public_targets = torch.swapdims(public_targets, 0, 1)
+        # print(public_inputs.shape, public_targets.shape)
+
+        public_inputs = torch.vstack([public_inputs[i] for i in range(public_inputs.shape[0])])
+        public_targets = torch.vstack([public_targets[i].unsqueeze(dim=1) for i in range(public_targets.shape[0])]).squeeze()
+
+        # print(public_inputs.shape, public_targets.shape)
 
     return public_inputs.float(), public_targets
-
-
-def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], num_bases: int,
-               batch_size: int, clip0: float, clip1: float, power_iter: int,
-               num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor):
-    device = next(net.parameters()).device
-    # print('\n==> Creating GEP class instance')
-    gep = GEP(num_bases, batch_size, clip0, clip1, power_iter).cuda()
-    ## attach auxiliary data to GEP instance
-    public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
-    gep.public_inputs = public_inputs
-    gep.public_targets = public_targets
-
-    net = extend(net)
-
-    num_params = 0
-    np_list = []
-    for p in net.parameters():
-        num_params += p.numel()
-        np_list.append(p.numel())
-
-    def group_params(num_p, groups):
-        assert groups >= 1
-
-        p_per_group = num_p // groups
-        num_param_list = [p_per_group] * (groups - 1)
-        num_param_list = num_param_list + [num_p - sum(num_param_list)]
-        return num_param_list
-
-    # print(f'\n==> Dividing {num_params} parameters in to {num_groups} groups')
-    gep.num_param_list = group_params(num_params, num_groups)
-
-    gep.num_params = num_params
-
-    loss_fn = extend(loss_fn)
-
-    return net, loss_fn, gep
 
 
 def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams,
@@ -123,31 +119,41 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         # p_inner_bar = tqdm(range(Config.NUM_INTERNAL_EPOCHS), desc='Internal loop', leave=False)
         # for _ in p_inner_bar:
         for internal_epoch in range(Config.NUM_INTERNAL_EPOCHS):
-            loss, acc, epoch_grads, local_model, local_optimizer = \
+            loss, acc, _, local_model, local_optimizer = \
                 run_single_epoch_keep_grads(model=local_model, optimizer=local_optimizer,
                                             loader=train_loader, criterion=loss_fn,
                                             batch_size=train_params.batch_size,
                                             gep=gep if Config.USE_GEP else None)
 
-            print('User', i, u, 'internal epoch', internal_epoch, 'Loss', loss, 'acc', acc)
-            if Config.WRITE_TO_WANDB:
-                wandb.log({
-                    f'User {u} Train Loss': loss
-                })
+            if Config.TOY_STORY:
+                print('User', i, u, 'Bias: ', '%.3f' % USERS_BIASES[u], 'Variance: ', '%.3f' % USERS_VARIANCES[u],
+                      'internal epoch', internal_epoch, 'Loss', '%.3f' % loss)
+            else:
+                print('User', i, u,'internal epoch', internal_epoch, 'Loss', '%.3f' % loss, 'acc', acc)
+            # if Config.WRITE_TO_WANDB:
+            #     wandb.log({
+            #         f'User {u} Train Loss': loss
+            #     })
 
             for p, lp in zip(model.parameters(), local_model.parameters()):
                 # p.grad.data += (lp.grad.data / num_clients_in_epoch)
                 p.grad_batch[i] = lp.grad.data
+                del lp.grad
                 # print('p.grad', p.grad)
                 # print('p.grad_batch', p.grad_batch)
 
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
             user_acc += acc / Config.NUM_INTERNAL_EPOCHS
 
+            del loss, acc
+
         epoch_train_loss += user_loss / num_clients_in_epoch
         epoch_train_acc += user_acc / num_clients_in_epoch
 
-        del local_model
+        del local_model, train_loader, local_optimizer, user_loss, user_acc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         # pbar.set_description(f"Iteration {i}. User {u}. Epoch running loss {epoch_train_loss}."
         #                      f" Epoch running acc {epoch_train_acc}")
@@ -163,9 +169,12 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
 
 def federated_train_model(model, loss_fn, train_user_list, validation_user_list, test_user_list, num_epochs,
-                          internal_train_params: TrainParams, dp_params=None, attach_gep_to_model_fn=None,
+                          internal_train_params: TrainParams, dp_params=None,
+                          gep: GEP = None,
+                          # attach_gep_to_model_fn=None,
                           log2wandb=False,
                           output_fn=lambda s: None):
+    assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
     eval_params = TrainParams(epochs=1, batch_size=internal_train_params.batch_size)
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=Config.GLOBAL_LEARNING_RATE * Config.NUM_CLIENT_AGG,
@@ -175,12 +184,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
     best_loss = 100000
     loss_increase_count = 0
 
-    assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
-        f'USE_GEP = {Config.USE_GEP} but ' \
-        f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
-    gep = None
-    if Config.USE_GEP:
-        model, loss_fn, gep = attach_gep_to_model_fn(model)
+    # assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
+    #     f'USE_GEP = {Config.USE_GEP} but ' \
+    #     f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
+    # gep = None
+    # if Config.USE_GEP:
+    #     model, loss_fn, gep = attach_gep_to_model_fn(model)
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
     for epoch in range(num_epochs):
@@ -195,28 +204,41 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         model.eval()
         val_loss, val_acc = 0, 0
-        for u in validation_user_list:
+        for i,u in enumerate(validation_user_list):
             validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
                                                   datasets=['validation'],
                                                   output_fn=lambda s: None)
-            loss, acc = run_single_epoch(TrainObjects(loader=validation_loader, model=model, criterion=loss_fn),
+            loss, acc = run_single_epoch(loader=validation_loader, model=model, criterion=loss_fn,
                                          train_params=eval_params)
-            print(f'User {u} Validation Loss', loss)
-            if log2wandb:
-                wandb.log({
-                    f'User {u} Validation Loss': loss
-                })
 
-            val_loss += loss / len(validation_user_list)
-            val_acc += acc / len(validation_user_list)
+            if Config.TOY_STORY:
+                print('User', i, u, 'Bias: ', '%.3f' % USERS_BIASES[u], 'Variance: ', '%.3f' % USERS_VARIANCES[u],
+                      'Validation Loss', '%.3f' % loss)
+            else:
+                print('User', i, u, 'Validation Loss', '%.3f' % loss, 'acc', acc)
 
+            # if log2wandb:
+            #     wandb.log({
+            #         f'User {u} Validation Loss': loss
+            #     })
+
+            val_loss += float(loss) / float(len(validation_user_list))
+            val_acc += float(acc) / float(len(validation_user_list))
+
+            # Release memory
+            del loss, acc, validation_loader
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
+        if Config.TOY_STORY:
+            print(f'federated global epoch {epoch} train_loss {epoch_train_loss} val set loss {val_loss}')
+        else:
+            print(f'federated global epoch {epoch} train_loss {epoch_train_loss},'
+                  f' train_acc {epoch_train_acc} val set loss {val_loss} val set acc {val_acc}')
 
-        print(f'federated global epoch {epoch} '
-              f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
-              f'val set loss {val_loss} val set acc {val_acc}')
 
         if log2wandb:
             wandb.log({
@@ -231,6 +253,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             loss_increase_count = 0
         else:
             loss_increase_count += 1
+            print('loss_increase_count', loss_increase_count)
 
         if loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             break

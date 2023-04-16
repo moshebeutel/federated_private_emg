@@ -1,24 +1,13 @@
 # Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import math
-
 # package for computing individual gradients
-from backpack import backpack, extend
+from backpack import backpack
 from backpack.extensions import BatchGrad
 
-from common.utils import labels_to_consecutive, flatten_tensor
-
-
-#
-# def flatten_tensor(tensor_list):
-#     for i in range(len(tensor_list)):
-#         tensor_list[i] = tensor_list[i].reshape([tensor_list[i].shape[0], -1])
-#     flatten_param = torch.cat(tensor_list, dim=1)
-#     del tensor_list
-#     return flatten_param
+from common.utils import flatten_tensor
 
 
 @torch.jit.script
@@ -121,19 +110,24 @@ class GEP(nn.Module):
 
     def get_anchor_gradients(self, net, loss_func):
         # print('get_anchor_gradient')
-        outputs = net(self.public_inputs)
-        loss = loss_func(outputs.cpu(), self.public_targets.cpu())
-        with backpack(BatchGrad()):
-            # print('get_anchor_gradients. before loss.backward()')
-            loss.backward()
+
+        for inputs, targets in self.loader:
+            outputs = net(inputs)
+            loss = loss_func(outputs.cpu(), targets.cpu())
+            with backpack(BatchGrad()):
+                # print('get_anchor_gradients. before loss.backward()')
+                loss.backward()
+            del loss, outputs
         cur_batch_grad_list = []
         for p in net.parameters():
             # print('get_anchor_gradients. p.grad_batch.shape', p.grad_batch.shape)
             if hasattr(p, 'grad_batch'):
                 cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
                 del p.grad_batch
+
         return flatten_tensor(cur_batch_grad_list)
 
+    # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
         # print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
@@ -170,20 +164,19 @@ class GEP(nn.Module):
 
                 num_bases_list[i] = num_bases
                 selected_bases_list.append(selected_bases.to(device))
+                del pub_grad, pub_error
 
             self.selected_bases_list = selected_bases_list
             # print(f'selected bases list len {len(self.selected_bases_list)}')
             # print('self.selected_bases_list', self.selected_bases_list)
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
+            del pub_errs, num_bases_list
         del anchor_grads
 
+    # @profile
     def forward(self, target_grad, logging=False):
         # print('gep forward')
-        # if 'selected_bases_list' not in self.__dict__.keys():
-        #     print('selected_bases_list not in dict. return')
-        #     return target_grad
-
         with torch.no_grad():
             num_param_list = self.num_param_list
             embedding_list = []
@@ -191,11 +184,6 @@ class GEP(nn.Module):
             offset = 0
             if logging:
                 print('group wise approx error')
-
-            # target_grad = flatten_tensor(
-            #     [net_param.grad_batch.reshape(net_param.grad_batch.shape[0], -1) for net_param in
-            #      self.net_wrapper.net.parameters()])
-            # print('target_grad.shape', target_grad.shape)
 
             for i, num_param in enumerate(num_param_list):
                 grad = target_grad[:, offset:offset + num_param]
@@ -219,6 +207,7 @@ class GEP(nn.Module):
 
                 embedding_list.append(embedding)
                 offset += num_param
+                del grad, embedding, selected_bases
 
             concatnated_embedding = torch.cat(embedding_list, dim=1)
             clipped_embedding = clip_column(concatnated_embedding, clip=self.clip0, inplace=False)
@@ -227,6 +216,7 @@ class GEP(nn.Module):
                 print('average norm of clipped embedding: ', torch.mean(norms).item(), 'max norm: ',
                       torch.max(norms).item(), 'median norm: ', torch.median(norms).item())
             avg_clipped_embedding = torch.sum(clipped_embedding, dim=0) / self.batch_size
+            del clipped_embedding
 
             no_reduction_approx = self.get_approx_grad(concatnated_embedding)
             residual_gradients = target_grad - no_reduction_approx
@@ -239,4 +229,5 @@ class GEP(nn.Module):
 
             avg_clipped_residual_gradients = torch.sum(clipped_residual_gradients, dim=0) / self.batch_size
             avg_target_grad = torch.sum(target_grad, dim=0) / self.batch_size
+            del no_reduction_approx, residual_gradients, clipped_residual_gradients
             return avg_clipped_embedding.view(-1), avg_clipped_residual_gradients.view(-1), avg_target_grad.view(-1)

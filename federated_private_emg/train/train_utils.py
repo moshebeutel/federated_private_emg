@@ -10,6 +10,7 @@ import torch
 import wandb
 from backpack import backpack
 from backpack.extensions import BatchGrad
+from memory_profiler import profile
 from tqdm import tqdm
 
 # from common.config import Config
@@ -59,9 +60,9 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         bench_model.train()
 
     # Init grads accumulator
-    accumulated_grads = OrderedDict()
+    # accumulated_grads = OrderedDict()
     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-        accumulated_grads[n] = torch.zeros_like(p.data)
+        # accumulated_grads[n] = torch.zeros_like(p.data)
         bp.data = copy.deepcopy(p.data)
         p.grad = torch.zeros_like(p.data)
         bp.grad = torch.zeros_like(bp.data)
@@ -138,15 +139,16 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
             del bench_outputs
 
         if Config.USE_GEP and Config.INTERNAL_BENCHMARK:
-            gep_batch(accumulated_grads, gep, model)
+            gep_batch(None, gep, model)
+            # gep_batch(accumulated_grads, gep, model)
         else:  # No internal GEP
             lr = optimizer.param_groups[0]['lr']
             # print('Effective lr', lr)
-            with torch.no_grad():
-                for i, (n, p) in enumerate(model.named_parameters()):
-                    # accumulated_grads[n] -= p.grad.data
-                    # accumulated_grads[n] -= (p.grad.data * lr * len(loader))
-                    accumulated_grads[n] -= (p.grad.data * lr)
+            # with torch.no_grad():
+            #     for i, (n, p) in enumerate(model.named_parameters()):
+            #         # accumulated_grads[n] -= p.grad.data
+            #         # accumulated_grads[n] -= (p.grad.data * lr * len(loader))
+            #         accumulated_grads[n] -= (p.grad.data * lr)
 
         if Config.TOY_STORY and Config.PLOT_GRADS:
             for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
@@ -243,13 +245,12 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                 # bp.grad_batch = -diff.unsqueeze(dim=0)
                 # print(bn, bp.grad_batch, bp.grad)
 
-
-
             # for bn, bp in bench_model.named_parameters():
             #     print(bn, bp.grad)
-    return epoch_loss, epoch_acc, accumulated_grads, bench_model, optimizer
+    return epoch_loss, epoch_acc, None, bench_model, optimizer
+    # return epoch_loss, epoch_acc, accumulated_grads, bench_model, optimizer
 
-
+# @profile
 def gep_batch(accumulated_grads, gep, model, batchsize):
     assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
     batch_grad_list = []
@@ -257,11 +258,11 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         if hasattr(p, 'grad_batch'):
             # print('p.grad_batch.shape', p.grad_batch.shape)
             batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-            # del p.grad_batch
+            del p.grad_batch
 
     # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
-    clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
+    # clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
     if Config.ADD_DP_NOISE:
         # Perturbation
         theta_noise = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
@@ -275,6 +276,7 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         # print('grad_noise', torch.linalg.norm(grad_noise))
         clipped_theta += theta_noise
         residual_grad += grad_noise
+        del theta_noise, grad_noise
     # print('clipped_theta', clipped_theta, torch.linalg.norm(clipped_theta))
     # print('residual_grad', residual_grad, torch.linalg.norm(residual_grad))
     # print('target_grad', target_grad, torch.linalg.norm(target_grad))
@@ -299,11 +301,14 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         if accumulated_grads is not None:
             accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
         offset += numel
-    del clean_grad, noisy_grad, batch_grad_list
+    del noisy_grad, batch_grad_list
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
-def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now):
-    model, loader, criterion, optimizer = astuple(train_objects)
+def dp_sgd_fwd_bwd(inputs, labels, model, criterion, optimizer, dp_params, zero_grad_now, grad_step_now):
+    # model, loader, criterion, optimizer = astuple(train_objects)
     if model.training and zero_grad_now:
         # optimizer.zero_grad() done
         # at first batch or if optimizer.step() done at previous batch
@@ -318,17 +323,24 @@ def dp_sgd_fwd_bwd(inputs, labels, train_objects, dp_params, zero_grad_now, grad
             if dp_params is not None:
                 add_dp_noise(model, params=dp_params)
             optimizer.step()
-    return predicted, float(loss)
+    floss = float(loss)
+    del loss, outputs
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return predicted, float(floss)
 
 
-def run_single_epoch(train_objects: TrainObjects,
+def run_single_epoch(model, loader, criterion,
+                     # train_objects: TrainObjects,
                      train_params: TrainParams,
+                     optimizer=None,
                      dp_params: DpParams = None,
                      fwd_bwd_fn: Callable[[torch.Tensor, torch.Tensor, TrainObjects, DpParams, bool, bool], (
                              torch.Tensor, int)] = dp_sgd_fwd_bwd) \
         -> (float, float):
     _, batch_size, descent_every, _, _ = astuple(train_params)
-    model, loader, criterion, optimizer = astuple(train_objects)
+    # model, loader, criterion, optimizer = astuple(train_objects)
 
     assert not model.training or optimizer is not None, 'None Optimizer  given at train epoch'
     running_loss, correct_counter, sample_counter, counter = 0, 0, 0, 0
@@ -350,7 +362,8 @@ def run_single_epoch(train_objects: TrainObjects,
 
         grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
-        predicted, loss = fwd_bwd_fn(inputs, labels, train_objects, dp_params, zero_grad_now, grad_step_now)
+        predicted, loss = fwd_bwd_fn(inputs=inputs, labels=labels, model=model, criterion=criterion, optimizer=optimizer,
+                                     dp_params=dp_params, zero_grad_now=zero_grad_now, grad_step_now=grad_step_now)
         zero_grad_now = not grad_step_now
 
         running_loss += loss
@@ -360,6 +373,7 @@ def run_single_epoch(train_objects: TrainObjects,
 
         y_pred += ([] if Config.TOY_STORY else predicted.cpu().tolist())
         y_labels += labels.cpu().tolist()
+        del labels, inputs, batch
     loss = running_loss / float(counter)
     acc = 100 * correct_counter / sample_counter
     return loss, acc

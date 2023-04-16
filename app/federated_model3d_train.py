@@ -10,26 +10,30 @@ from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user
     test_user_list
 from differential_privacy.params import DpParams
 from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, PadBeforeLast, Squeeze
-from train.federated_utils import federated_train_model, attach_gep, create_public_dataset
+from train.federated_utils import federated_train_model, create_public_dataset
+from differential_privacy.utils import attach_gep
 from train.params import TrainParams
 from common.config import Config
 from functools import *
 
 
 def main():
-    q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
-    sigma0 = '%.3f' % Config.GEP_SIGMA0
-    sigma1 = '%.3f' % Config.GEP_SIGMA1
-    clip0 = '%.3f' % Config.GEP_CLIP0
-    clip1 = '%.3f' % Config.GEP_CLIP1
+    print('USERS_BIASES', {u: '%.3f' % b for u, b in USERS_BIASES.items()})
 
-    dp_sigma = '%.3f' % Config.DP_SIGMA
-    dp_c = '%.3f' % Config.DP_C
+    print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
+
+    q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
 
     if Config.USE_GEP:
+        sigma0 = '%.3f' % Config.GEP_SIGMA0
+        sigma1 = '%.3f' % Config.GEP_SIGMA1
+        clip0 = '%.3f' % Config.GEP_CLIP0
+        clip1 = '%.3f' % Config.GEP_CLIP1
         exp_name = f'EMG GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
         # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
     elif Config.USE_SGD_DP:
+        dp_sigma = '%.3f' % Config.DP_SIGMA
+        dp_c = '%.3f' % Config.DP_C
         exp_name = f'EMG SGD_DP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
         # exp_name = f'High Dim SGD_DP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
     # exp_name = utils.get_exp_name('TOY STORY Federated')
@@ -59,20 +63,15 @@ def single_train():
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
 
-    # model = Model3d(number_of_classes=Config.NUM_CLASSES,
-    #                 window_size=Config.WINDOW_SIZE,
-    #                 use_group_norm=True,
-    #                 output_info_fn=logger.info,
-    #                 output_debug_fn=logger.debug)
-
+    # Define Model
     if Config.TOY_STORY:
+        # A simple linear 2-layer Toy model
         model = torch.nn.Sequential(
             torch.nn.Flatten(start_dim=1, end_dim=-1),
-            # DenseBlock
             torch.nn.Linear(in_features=Config.DATA_DIM, out_features=Config.HIDDEN_DIM, bias=True),
-            # torch.nn.Linear(in_features=1000, out_features=100, bias=True),
             torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=Config.OUTPUT_DIM, bias=True))
     else:
+        # Model3d
         model = torch.nn.Sequential(torch.nn.Sequential(
 
             Reshape3Bands(window_size=Config.WINDOW_SIZE, W=3, H=8),
@@ -122,6 +121,7 @@ def single_train():
             # output layer
             torch.nn.Linear(in_features=64, out_features=7, bias=True)
         ))
+    # Init model weights
     for m in model.modules():
         if isinstance(m, nn.Conv3d):
             torch.nn.init.kaiming_normal_(m.weight)
@@ -136,16 +136,23 @@ def single_train():
             torch.nn.init.kaiming_normal_(m.weight)
             m.bias.data.zero_()
 
+    num_of_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f'Model has {num_of_parameters} trainable parameters')
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
+    gep = None
     if Config.USE_GEP:
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
-        attach_gep_to_model = partial(attach_gep, loss_fn=loss_fn, num_bases=Config.GEP_NUM_BASES,
-                                      batch_size=Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else Config.NUM_CLIENT_AGG,
-                                      clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
-                                      power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
-                                      public_inputs=public_inputs, public_targets=public_targets)
+        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else Config.NUM_CLIENT_AGG
+
+        model, loss_fn, gep = attach_gep(net=model,
+                                         loss_fn=loss_fn,
+                                         num_bases=Config.GEP_NUM_BASES,
+                                         batch_size=batch_size_for_gep,
+                                         clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
+                                         power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
+                                         public_inputs=public_inputs, public_targets=public_targets)
 
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
                          dp_C=Config.DP_C)
@@ -163,7 +170,7 @@ def single_train():
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
                           dp_params=dp_params if Config.ADD_DP_NOISE else None,
-                          attach_gep_to_model_fn=None if not Config.USE_GEP else attach_gep_to_model,
+                          gep=None if not Config.USE_GEP else gep,
                           log2wandb=Config.WRITE_TO_WANDB,
                           output_fn=logger.info)
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import errno
 import logging
 import os
-import random
 import re
 import sys
 import time
@@ -29,28 +28,26 @@ VALIDATION_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ))
 TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 
 # TOY STORY
-# DATA_COEFFS = [[random.random() * Config.DATA_SCALE, random.random() * Config.DATA_SCALE]
-#                for _ in range(Config.NUM_OUTPUTS)]
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
 if Config.TOY_STORY:
-    train_user_list = [('%d' % i).zfill(3) for i in range(1, 101)]
-    public_users = [('%d' % i).zfill(3) for i in range(1, 11)]
-    validation_user_list = [('%d' % i).zfill(3) for i in range(101, 111)]
-    test_user_list = [('%d' % i).zfill(3) for i in range(111, 121)]
+    train_user_list = [('%d' % i).zfill(3) for i in range(1, 201)]
+    public_users = [('%d' % i).zfill(3) for i in range(1, 33)]
+    validation_user_list = [('%d' % i).zfill(3) for i in range(201, 211)]
+    test_user_list = [('%d' % i).zfill(3) for i in range(211, 221)]
 
 else:
-    public_users = ['04']
-    train_user_list = ['04', '13', '35', '08', '17', '18', '19', '25', '26', '27', '29']
-    validation_user_list = ['22', '23', '47']
-    test_user_list = ['07', '12', '48']
+    public_users = ['04', '13']
+    train_user_list = ['04', '13', '35', '08']
+    validation_user_list = ['22', '23']
+    test_user_list = ['07', '12']
 
 all_users_list = train_user_list + validation_user_list + test_user_list
 USERS_BIASES = {user: bias for (user, bias) in
                 zip(all_users_list, (Config.USER_BIAS_SCALE * torch.randn(size=(len(all_users_list),))).tolist())}
 USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
-                                                              (Config.DATA_NOISE_SCALE * torch.randn(
+                                                              (Config.DATA_NOISE_SCALE * torch.rand(
                                                                   size=(len(all_users_list),))).tolist())}
 
 
@@ -251,7 +248,7 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     logging.getLogger(name).setLevel(level)
     return created_logger
 
-
+# @profile
 def init_data_loaders(datasets_folder_name,
                       datasets=['train', 'validation', 'test'],
                       batch_size=Config.BATCH_SIZE,
@@ -272,6 +269,7 @@ def init_data_loaders(datasets_folder_name,
         )
         loaders.append(loader)
         output_fn(f'Created {dataset} loader. Len = {len(loader)}')
+        del X, y
 
     assert len(loaders) == len(datasets), f'Given {len(datasets)}, Created {len(loaders)} loaders'
     return tuple(loaders) if len(loaders) > 1 else loaders[0]
