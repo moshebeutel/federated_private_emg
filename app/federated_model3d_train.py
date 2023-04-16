@@ -6,16 +6,14 @@ from torch import nn
 
 import wandb
 from common import utils
+from common.config import Config
 from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
     test_user_list
 from differential_privacy.params import DpParams
+from differential_privacy.utils import attach_gep
 from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, PadBeforeLast, Squeeze
 from train.federated_utils import federated_train_model, create_public_dataset
-from differential_privacy.utils import attach_gep
 from train.params import TrainParams
-from common.config import Config
-from functools import *
-
 
 def main():
     print('USERS_BIASES', {u: '%.3f' % b for u, b in USERS_BIASES.items()})

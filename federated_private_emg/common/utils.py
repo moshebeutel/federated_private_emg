@@ -13,6 +13,9 @@ from math import sqrt, pow
 import numpy as np
 import pandas as pd
 import torch
+if Config.CFAR10_DATA:
+    from torchvision.datasets import CIFAR10
+    from torchvision.transforms import transforms
 
 from common.config import Config
 
@@ -211,13 +214,48 @@ def create_toy_data(data_size: int, bias: float = 0.0, variance: float = Config.
     return X, y
 
 
-def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[]):
+def create_cfar_data(datasize, dataset: str):
+
+    normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+
+    trans = [transforms.ToTensor()]
+
+    trans.append(normalization)
+
+    transform = transforms.Compose(trans)
+
+    dataset = CIFAR10(
+        Config.CFAR10_DATA,
+        train=True,
+        download=True,
+        transform=transform
+    )
+
+    test_set = CIFAR10(
+        Config.CFAR10_DATA,
+        train=False,
+        download=True,
+        transform=transform
+    )
+
+    train_size = 0.9 * datasize
+    val_size = 0.1 * datasize # 10000
+    # train_size = len(dataset) - val_size
+    train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    return train_set, val_set, test_set
+
+
+def load_datasets(datasets_folder_name, x_filename, y_filename, exclude_labels=[], dataset='train'):
     if Config.TOY_STORY:
         u = datasets_folder_name[-3:]
         bias = USERS_BIASES[u]
         variance = USERS_VARIANCES[u]
         # print(f'Create toy data for user {u} who has bias {bias} and variance {variance}')
         X, y = create_toy_data(data_size=Config.PRIVATE_TRAIN_DATA_SIZE, bias=bias, variance=variance)
+    elif Config.CFAR10_DATA:
+        u = datasets_folder_name[-3:]
+        X, y = create_cfar_data(datasize=Config.PRIVATE_TRAIN_DATA_SIZE, dataset=dataset)
     else:
         if isinstance(datasets_folder_name, str):
             datasets_folder_name = [datasets_folder_name]
@@ -248,7 +286,7 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     logging.getLogger(name).setLevel(level)
     return created_logger
 
-# @profile
+
 def init_data_loaders(datasets_folder_name,
                       datasets=['train', 'validation', 'test'],
                       batch_size=Config.BATCH_SIZE,
