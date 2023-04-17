@@ -34,7 +34,8 @@ class Config:
     WRITE_TO_WANDB = True
 
     # FL
-    NUM_CLIENT_AGG = 5
+    NUM_CLIENT_AGG = 50
+    SAMPLE_CLIENTS_WITH_REPLACEMENT = False
     NUM_INTERNAL_EPOCHS = 1
 
 
@@ -51,7 +52,7 @@ class Config:
 
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 0.01 #50
+    GEP_CLIP0 = 1.0 #50
     GEP_CLIP1 = 20.0 #   0.02 #20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     # GEP_SIGMA1 = 2.0 * GEP_CLIP1 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON

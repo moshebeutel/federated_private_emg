@@ -95,7 +95,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
     # num_clients_in_epoch = len(train_user_list)
     num_clients_in_epoch = Config.NUM_CLIENT_AGG
-    clients_in_epoch = random.choices(train_user_list, k=num_clients_in_epoch)
+    # clients_in_epoch = random.choices(train_user_list, k=num_clients_in_epoch)
+    sample_fn = random.choices if Config.SAMPLE_CLIENTS_WITH_REPLACEMENT else random.sample
+    clients_in_epoch = sample_fn(train_user_list, k=num_clients_in_epoch)
     device = next(model.parameters()).device
 
     optimizer.zero_grad()

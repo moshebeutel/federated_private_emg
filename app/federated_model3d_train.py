@@ -30,7 +30,7 @@ def main():
         clip0 = '%.3f' % Config.GEP_CLIP0
         clip1 = '%.3f' % Config.GEP_CLIP1
         # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users all public WITHOUT residual gradients'
+        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users all public WITHOUT residual gradients AGG {Config.NUM_CLIENT_AGG}'
         # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
     elif Config.USE_SGD_DP:
         dp_sigma = '%.3f' % Config.DP_SIGMA
