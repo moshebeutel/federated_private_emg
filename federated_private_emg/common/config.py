@@ -5,7 +5,7 @@ from math import sqrt, log
 
 
 class Config:
-    LOG_FOLDER = '/home/user1/GIT/federated_private_emg/log'
+    LOG_FOLDER = '/home/moshe/GIT/federated_private_emg/log'
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -22,7 +22,7 @@ class Config:
     MOMENTUM = 0.9
     UNIFIED_DATA_DIR = '../data/unified_dataframes/every10'
     TENSORS_DATA_DIR = '../data/tensors_datasets/every10'
-    WINDOWED_DATA_DIR = '/home/user1/GIT/federated_private_emg/data/windowed_tensors_datasets/every10'
+    WINDOWED_DATA_DIR = '/home/moshe/GIT/federated_private_emg/data/windowed_tensors_datasets/every10'
     NUM_CLASSES = 7
     WINDOW_SIZE = 260
     EVAL_EVERY = 1
@@ -37,6 +37,7 @@ class Config:
     NUM_CLIENT_AGG = 50
     SAMPLE_CLIENTS_WITH_REPLACEMENT = False
     NUM_INTERNAL_EPOCHS = 1
+    CIFAR10_CLASSES_PER_USER = 2
 
 
     # DP
@@ -68,7 +69,7 @@ class Config:
 
     #CIFAR10
     CIFAR10_DATA = (DATASET == DATASET_TYPE._CIFAR10)
-    CIFAR10_DATASET_DIR = '/home/user1/GIT/federated_private_emg/data/cifar10_dataset'
+    CIFAR10_DATASET_DIR = '/home/moshe/GIT/federated_private_emg/data/cifar10'
 
     # TOY STORY
     TOY_STORY = (DATASET == DATASET_TYPE._TOY_STORY)

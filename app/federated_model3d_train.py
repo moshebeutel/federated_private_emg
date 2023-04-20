@@ -30,7 +30,7 @@ def main():
         clip0 = '%.3f' % Config.GEP_CLIP0
         clip1 = '%.3f' % Config.GEP_CLIP1
         # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users all public WITHOUT residual gradients AGG {Config.NUM_CLIENT_AGG}'
+        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
         # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
     elif Config.USE_SGD_DP:
         dp_sigma = '%.3f' % Config.DP_SIGMA
@@ -150,7 +150,7 @@ def single_train():
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
 
     if Config.CIFAR10_DATA:
-        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE, classes_per_user=10)
+        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE, classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
         utils.CIFAR10_USER_LOADERS = \
             {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
              for user, train_loader, validation_loader, test_loader in

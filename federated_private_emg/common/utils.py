@@ -37,10 +37,10 @@ DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float
                          requires_grad=False) * Config.DATA_SCALE
 
 if Config.TOY_STORY or Config.CIFAR10_DATA:
-    train_user_list = [('%d' % i).zfill(3) for i in range(1, 51)]
+    train_user_list = [('%d' % i).zfill(3) for i in range(1, 501)]
     public_users = [('%d' % i).zfill(3) for i in range(1, 51)]
-    validation_user_list = [('%d' % i).zfill(3) for i in range(51, 56)]
-    test_user_list = [('%d' % i).zfill(3) for i in range(56, 61)]
+    validation_user_list = [('%d' % i).zfill(3) for i in range(501, 601)]
+    test_user_list = [('%d' % i).zfill(3) for i in range(601, 801)]
 else:
     public_users = ['04', '13']
     train_user_list = ['04', '13', '35', '08']
@@ -330,7 +330,6 @@ def init_data_loaders(datasets_folder_name,
             del X, y
         loaders.append(loader)
         output_fn(f'Created {dataset} loader. Len = {len(loader)}')
-
 
     assert len(loaders) == len(datasets), f'Given {len(datasets)}, Created {len(loaders)} loaders'
     return tuple(loaders) if len(loaders) > 1 else loaders[0]
