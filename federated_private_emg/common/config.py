@@ -44,6 +44,7 @@ class Config:
     DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['_NO_DP', '_SGD_DP', '_GEP'])
     DP_METHOD = DP_METHOD_TYPE._GEP
     USE_GEP = (DP_METHOD == DP_METHOD_TYPE._GEP)
+    PUBLIC_USERS_CONTRIBUTE_TO_LEARNING = True
     USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE._SGD_DP)
     ADD_DP_NOISE = True
     LOT_SIZE_IN_BATCHES = 5
@@ -53,7 +54,7 @@ class Config:
 
     # GEP
     GEP_NUM_BASES = 1
-    GEP_CLIP0 = 1.0 #50
+    GEP_CLIP0 = 10.0 #50
     GEP_CLIP1 = 20.0 #   0.02 #20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     # GEP_SIGMA1 = 2.0 * GEP_CLIP1 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON

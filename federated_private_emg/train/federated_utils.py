@@ -106,6 +106,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     if Config.USE_GEP:
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
         gep.get_anchor_space(model, loss_func=loss_fn)
+        if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
+            clients_in_epoch.extend(gep.public_users)
+            num_clients_in_epoch = len(clients_in_epoch)
 
     for p in model.parameters():
         p.grad = torch.zeros_like(p, device=p.device)

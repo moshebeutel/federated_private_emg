@@ -159,7 +159,7 @@ def single_train():
     if Config.USE_GEP:
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
 
-        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else Config.NUM_CLIENT_AGG
+        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users)
 
         model, loss_fn, gep = attach_gep(net=model,
                                          loss_fn=loss_fn,
@@ -167,7 +167,7 @@ def single_train():
                                          batch_size=batch_size_for_gep,
                                          clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
                                          power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
-                                         public_inputs=public_inputs, public_targets=public_targets)
+                                         public_inputs=public_inputs, public_targets=public_targets, public_users=public_users)
 
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
                          dp_C=Config.DP_C)

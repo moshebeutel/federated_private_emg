@@ -178,7 +178,6 @@ class GEP(nn.Module):
         del anchor_grads
         gc.collect()
 
-    # @profile
     def forward(self, target_grad, logging=False):
         # print('gep forward')
         with torch.no_grad():

@@ -91,12 +91,13 @@ def per_sample_gradient_fwd_bwd(inputs, labels, train_objects, dp_params, zero_g
 
 def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], num_bases: int,
                batch_size: int, clip0: float, clip1: float, power_iter: int,
-               num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor):
+               num_groups: int, public_inputs: torch.Tensor, public_targets: torch.Tensor, public_users: list[str]):
     device = next(net.parameters()).device
     # print('\n==> Creating GEP class instance')
     gep = GEP(num_bases, batch_size, clip0, clip1, power_iter)
     ## attach auxiliary data to GEP instance
     public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
+    gep.public_users = public_users
     gep.public_inputs = public_inputs
     gep.public_targets = public_targets
     gep.loader = torch.utils.data.DataLoader(
