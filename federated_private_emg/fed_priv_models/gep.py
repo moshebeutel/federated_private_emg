@@ -113,21 +113,22 @@ class GEP(nn.Module):
 
     def get_anchor_gradients(self, net, loss_func):
         # print('get_anchor_gradient')
-        device = next(net.parameters()).device
-        for inputs, targets in self.loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = net(inputs)
-            loss = loss_func(outputs.cpu(), targets.cpu())
-            with backpack(BatchGrad()):
-                # print('get_anchor_gradients. before loss.backward()')
-                loss.backward()
-            del loss, outputs
+        # device = next(net.parameters()).device
+        # for inputs, targets in self.loader:
+        #     inputs, targets = inputs.to(device), targets.to(device)
+        #     outputs = net(inputs)
+        #     loss = loss_func(outputs.cpu(), targets.cpu())
+        #     with backpack(BatchGrad()):
+        #         # print('get_anchor_gradients. before loss.backward()')
+        #         loss.backward()
+        #     del loss, outputs
         cur_batch_grad_list = []
         for p in net.parameters():
             # print('get_anchor_gradients. p.grad_batch.shape', p.grad_batch.shape)
             if hasattr(p, 'grad_batch'):
-                cur_batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-                del p.grad_batch
+                grad_batch = p.grad_batch[:len(self.public_users)]
+                cur_batch_grad_list.append(grad_batch.reshape(grad_batch.shape[0], -1))
+                # del p.grad_batch
 
         gc.collect()
 

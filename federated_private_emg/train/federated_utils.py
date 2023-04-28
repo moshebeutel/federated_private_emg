@@ -10,6 +10,7 @@ from common.config import Config
 from common.utils import init_data_loaders, labels_to_consecutive, \
     create_toy_data, USERS_BIASES, USERS_VARIANCES
 from differential_privacy.params import DpParams
+from fed_priv_models.custom_sequential import init_model
 from fed_priv_models.gep import GEP
 from train.params import TrainParams
 from train.train_objects import TrainObjects
@@ -94,21 +95,19 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                                  attach_gep_to_model_fn=None,
                                  output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
-    # num_clients_in_epoch = len(train_user_list)
-    num_clients_in_epoch = Config.NUM_CLIENT_AGG
-    # clients_in_epoch = random.choices(train_user_list, k=num_clients_in_epoch)
     sample_fn = random.choices if Config.SAMPLE_CLIENTS_WITH_REPLACEMENT else random.sample
-    clients_in_epoch = sample_fn(train_user_list, k=num_clients_in_epoch)
+    clients_in_epoch = sample_fn(train_user_list, k=Config.NUM_CLIENT_AGG)
     device = next(model.parameters()).device
 
     optimizer.zero_grad()
 
     if Config.USE_GEP:
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
-        gep.get_anchor_space(model, loss_func=loss_fn)
+        # gep.get_anchor_space(model, loss_func=loss_fn)
         if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
-            clients_in_epoch.extend(gep.public_users)
-            num_clients_in_epoch = len(clients_in_epoch)
+            clients_in_epoch = [*gep.public_users, *clients_in_epoch]
+
+    num_clients_in_epoch = len(clients_in_epoch)
 
     for p in model.parameters():
         p.grad = torch.zeros_like(p, device=p.device)
@@ -122,7 +121,11 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         train_loader = init_data_loaders(datasets_folder_name=user_dataset_folder_name, datasets=['train'],
                                          datasize=Config.PRIVATE_TRAIN_DATA_SIZE,
                                          output_fn=output_fn)
-        local_model = copy.deepcopy(model).to(device)
+
+        # local_model = copy.deepcopy(model).to(device)
+        local_model = init_model()
+        for lp, p in zip(local_model.parameters(), model.parameters()):
+            lp.data = p.data
 
         local_optimizer = torch.optim.SGD(local_model.parameters(), lr=Config.LEARNING_RATE,
                                           weight_decay=Config.WEIGHT_DECAY, momentum=0.9)
@@ -157,6 +160,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                 del lp.grad
                 # print('p.grad', p.grad)
                 # print('p.grad_batch', p.grad_batch)
+
+            if i == len(gep.public_users) - 1:
+                gep.get_anchor_space(model, loss_func=loss_fn)
 
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
             user_acc += acc / Config.NUM_INTERNAL_EPOCHS
@@ -200,13 +206,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
     best_loss = 100000
     loss_increase_count = 0
-
-    # assert Config.USE_GEP == (attach_gep_to_model_fn is not None), \
-    #     f'USE_GEP = {Config.USE_GEP} but ' \
-    #     f'attach_gep_to_model_fn {attach_gep_to_model_fn}'
-    # gep = None
-    # if Config.USE_GEP:
-    #     model, loss_fn, gep = attach_gep_to_model_fn(model)
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
     for epoch in range(num_epochs):

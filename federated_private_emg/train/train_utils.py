@@ -259,7 +259,7 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         if hasattr(p, 'grad_batch'):
             # print('p.grad_batch.shape', p.grad_batch.shape)
             batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
-            del p.grad_batch
+            # del p.grad_batch
 
     # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))

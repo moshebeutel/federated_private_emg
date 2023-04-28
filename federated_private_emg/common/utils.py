@@ -37,10 +37,13 @@ DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float
                          requires_grad=False) * Config.DATA_SCALE
 
 if Config.TOY_STORY or Config.CIFAR10_DATA:
-    train_user_list = [('%d' % i).zfill(3) for i in range(51, 501)]
-    public_users = [('%d' % i).zfill(3) for i in range(1, 51)]
-    validation_user_list = [('%d' % i).zfill(3) for i in range(501, 601)]
-    test_user_list = [('%d' % i).zfill(3) for i in range(601, 801)]
+    train_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
+    public_users = [('%d' % i).zfill(3) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
+    validation_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
+                                                               Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1)]
+    test_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
+                                                         Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL +
+                                                         Config.NUM_CLIENTS_TEST + 1)]
 else:
     public_users = ['04', '13']
     train_user_list = ['04', '13', '35', '08']

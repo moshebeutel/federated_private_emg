@@ -2,7 +2,6 @@ import logging
 import os
 
 import torch.nn
-from torch import nn
 
 import wandb
 from common import utils
@@ -11,7 +10,7 @@ from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user
     test_user_list, gen_random_loaders
 from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
-from fed_priv_models.pad_operators import PadLastDimCircular, Reshape3Bands, PadBeforeLast, Squeeze
+from fed_priv_models.custom_sequential import init_model
 from train.federated_utils import federated_train_model, create_public_dataset
 from train.params import TrainParams
 
@@ -64,85 +63,7 @@ def single_train():
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
 
-    # Define Model
-    if Config.TOY_STORY:
-        # A simple linear 2-layer Toy model
-        model = torch.nn.Sequential(
-            torch.nn.Flatten(start_dim=1, end_dim=-1),
-            torch.nn.Linear(in_features=Config.DATA_DIM, out_features=Config.HIDDEN_DIM, bias=True),
-            torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=Config.OUTPUT_DIM, bias=True))
-    elif Config.CIFAR10_DATA:
-        model = torch.nn.Sequential(
-            torch.nn.Flatten(start_dim=1, end_dim=-1),
-            torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
-            torch.nn.ReLU(),
-            torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=10, bias=True),
-            torch.nn.Softmax(dim=-1))
-    else:
-        # Model3d
-        model = torch.nn.Sequential(torch.nn.Sequential(
-
-            Reshape3Bands(window_size=Config.WINDOW_SIZE, W=3, H=8),
-            PadBeforeLast(),
-            PadLastDimCircular(window_size=Config.WINDOW_SIZE, W=3),
-
-            # Conv3DBlock
-            torch.nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1)),
-            torch.nn.AvgPool3d(kernel_size=(1, 3, 1), stride=(1, 3, 1), padding=0),
-            Squeeze(),
-            # torch.nn.GroupNorm(4, 32, eps=1e-05, affine=True),
-            torch.nn.ReLU(inplace=False),
-
-            # Conv2DBlock
-            torch.nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2)),
-            torch.nn.AvgPool2d(kernel_size=(3, 3), stride=(3, 3), padding=0),
-            Squeeze(),
-            # torch.nn.GroupNorm(4, 64, eps=1e-05, affine=True),
-            torch.nn.ReLU(inplace=False),
-
-            # Conv1DBlock
-            torch.nn.Conv1d(64, 128, kernel_size=(3,), stride=(2,)),
-            torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-            # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
-            torch.nn.ReLU(inplace=False),
-
-            # Conv1DBlock
-            torch.nn.Conv1d(128, 256, kernel_size=(3,), stride=(2,)),
-            torch.nn.AvgPool1d(kernel_size=(3,), stride=(3,), padding=(0,)),
-            # torch.nn.GroupNorm(4, 128, eps=1e-05, affine=True),
-            torch.nn.ReLU(inplace=False),
-
-            # FlattenToLinear(),
-            torch.nn.Flatten(start_dim=1, end_dim=-1),
-            # DenseBlock
-            torch.nn.Linear(in_features=256, out_features=256, bias=True),
-            torch.nn.ReLU(inplace=False),
-
-            # DenseBlock
-            torch.nn.Linear(in_features=256, out_features=128, bias=True),
-            torch.nn.ReLU(inplace=False),
-
-            # DenseBlock
-            torch.nn.Linear(in_features=128, out_features=64, bias=True),
-            torch.nn.ReLU(inplace=False),
-
-            # output layer
-            torch.nn.Linear(in_features=64, out_features=7, bias=True)
-        ))
-    # Init model weights
-    for m in model.modules():
-        if isinstance(m, nn.Conv3d):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Conv2d):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Conv1d):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Linear):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
+    model = init_model()
 
     num_of_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Model has {num_of_parameters} trainable parameters')
@@ -150,7 +71,8 @@ def single_train():
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
 
     if Config.CIFAR10_DATA:
-        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE, classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
+        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
+                                     classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
         utils.CIFAR10_USER_LOADERS = \
             {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
              for user, train_loader, validation_loader, test_loader in
