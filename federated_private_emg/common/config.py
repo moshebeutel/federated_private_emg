@@ -34,7 +34,7 @@ class Config:
     WRITE_TO_WANDB = True
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 3, 97, 500
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 2, 98, 500
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
     NUM_CLIENTS_VAL = 100
@@ -64,7 +64,7 @@ class Config:
     GEP_SIGMA1 = 0.0  # 2.0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 10
-    GEP_USE_RESIDUAL = True
+    GEP_USE_RESIDUAL = False
 
     # DP_SGD
     DP_C = 1000.0  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))

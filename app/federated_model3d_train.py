@@ -71,12 +71,22 @@ def single_train():
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
 
     if Config.CIFAR10_DATA:
-        loaders = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
+        loaders, cls_partitions = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
                                      classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
         utils.CIFAR10_USER_LOADERS = \
             {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
              for user, train_loader, validation_loader, test_loader in
              zip(utils.all_users_list, loaders[0], loaders[1], loaders[2])}
+
+        utils.CIFAR10_USER_CLS_PARTITIONS = \
+            {user: (cls,prb) for (user, cls, prb) in
+             zip(utils.all_users_list, cls_partitions['class'], cls_partitions['prob'])}
+
+        print('Public Class Partitions')
+        for u in public_users:
+            print(u, ':', utils.CIFAR10_USER_CLS_PARTITIONS[u])
+
+
     gep = None
     if Config.USE_GEP:
         public_inputs, public_targets = create_public_dataset(public_users=public_users)
@@ -89,7 +99,8 @@ def single_train():
                                          batch_size=batch_size_for_gep,
                                          clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
                                          power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
-                                         public_inputs=public_inputs, public_targets=public_targets, public_users=public_users)
+                                         public_inputs=public_inputs, public_targets=public_targets,
+                                         public_users=public_users)
 
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
                          dp_C=Config.DP_C)

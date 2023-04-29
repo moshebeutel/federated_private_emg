@@ -83,6 +83,7 @@ if Config.CIFAR10_DATA:
                        'test': CIFAR10_TEST_LOADER}
 
     CIFAR10_USER_LOADERS = {}
+    CIFAR10_USER_CLS_PARTITIONS = {}
 
 
 class SimpleGlobalCounter:
@@ -504,4 +505,4 @@ def gen_random_loaders(num_users, bz, classes_per_user):
         # create dataloaders from subsets
         dataloaders.append(list(map(lambda x: torch.utils.data.DataLoader(x, **loader_params), subsets)))
 
-    return dataloaders
+    return dataloaders, cls_partitions

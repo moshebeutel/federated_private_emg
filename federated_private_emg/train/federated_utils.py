@@ -6,6 +6,7 @@ import random
 import torch
 import wandb
 
+from common import utils
 from common.config import Config
 from common.utils import init_data_loaders, labels_to_consecutive, \
     create_toy_data, USERS_BIASES, USERS_VARIANCES
@@ -148,7 +149,8 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                 print('User', i, u, 'Bias: ', '%.3f' % USERS_BIASES[u], 'Variance: ', '%.3f' % USERS_VARIANCES[u],
                       'internal epoch', internal_epoch, 'Loss', '%.3f' % loss)
             else:
-                print('User', i, u, 'internal epoch', internal_epoch, 'Loss', '%.3f' % loss, 'acc', acc)
+                print('User', i, u, 'class partition ', utils.CIFAR10_USER_CLS_PARTITIONS[u],
+                      'internal epoch', internal_epoch, 'Loss', '%.3f' % loss, 'acc', acc)
             # if Config.WRITE_TO_WANDB:
             #     wandb.log({
             #         f'User {u} Train Loss': loss
@@ -232,7 +234,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 print('User', i, u, 'Bias: ', '%.3f' % USERS_BIASES[u], 'Variance: ', '%.3f' % USERS_VARIANCES[u],
                       'Validation Loss', '%.3f' % loss)
             else:
-                print('User', i, u, 'Validation Loss', '%.3f' % loss, 'acc', acc)
+                print('User', i, u, 'class partition ', utils.CIFAR10_USER_CLS_PARTITIONS[u],
+                      'Validation Loss', '%.3f' % loss, 'acc', acc)
             val_losses.append(float(loss))
             val_accs.append(float(acc))
             # if log2wandb:
