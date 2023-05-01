@@ -1,11 +1,13 @@
 from __future__ import annotations
 import inspect
+import os
 from enum import Enum
 from math import sqrt, log
 
 
 class Config:
-    LOG_FOLDER = '/home/moshe/GIT/federated_private_emg/log'
+    WORKDIR = os.getcwd()
+    LOG_FOLDER = os.path.join(WORKDIR, 'log')
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -22,33 +24,34 @@ class Config:
     MOMENTUM = 0.9
     UNIFIED_DATA_DIR = '../data/unified_dataframes/every10'
     TENSORS_DATA_DIR = '../data/tensors_datasets/every10'
-    WINDOWED_DATA_DIR = '/home/moshe/GIT/federated_private_emg/data/windowed_tensors_datasets/every10'
+    WINDOWED_DATA_DIR = os.path.join(WORKDIR, 'data/windowed_tensors_datasets/every10')
     NUM_CLASSES = 7
     WINDOW_SIZE = 260
     EVAL_EVERY = 1
     TEST_AT_END = True
 
-    DATASET_TYPE = Enum('DATASET_TYPE', ['_putEMG', '_TOY_STORY', '_CIFAR10'])
-    DATASET = DATASET_TYPE._CIFAR10
+    DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10'])
+    DATASET = DATASET_TYPE.CIFAR10
 
     WRITE_TO_WANDB = True
 
     # FL
     NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 2, 98, 500
-    assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
+    assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG,\
+        f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
     NUM_CLIENTS_VAL = 100
     NUM_CLIENTS_TEST = 200
     SAMPLE_CLIENTS_WITH_REPLACEMENT = False
     NUM_INTERNAL_EPOCHS = 1
-    CIFAR10_CLASSES_PER_USER = 2
+    CIFAR10_CLASSES_PER_USER = 1
 
     # DP
-    DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['_NO_DP', '_SGD_DP', '_GEP'])
-    DP_METHOD = DP_METHOD_TYPE._GEP
-    USE_GEP = (DP_METHOD == DP_METHOD_TYPE._GEP)
+    DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['NO_DP', 'SGD_DP', 'GEP'])
+    DP_METHOD = DP_METHOD_TYPE.GEP
+    USE_GEP = (DP_METHOD == DP_METHOD_TYPE.GEP)
     PUBLIC_USERS_CONTRIBUTE_TO_LEARNING = True
-    USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE._SGD_DP)
+    USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE.SGD_DP)
     ADD_DP_NOISE = True
     LOT_SIZE_IN_BATCHES = 5
     DP_EPSILON = 1.0
@@ -71,11 +74,11 @@ class Config:
     DP_SIGMA = 0.0  # sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # CIFAR10
-    CIFAR10_DATA = (DATASET == DATASET_TYPE._CIFAR10)
-    CIFAR10_DATASET_DIR = '/home/moshe/GIT/federated_private_emg/data/cifar10'
+    CIFAR10_DATA = (DATASET == DATASET_TYPE.CIFAR10)
+    CIFAR10_DATASET_DIR = os.path.join(WORKDIR, 'data/cifar10')
 
     # TOY STORY
-    TOY_STORY = (DATASET == DATASET_TYPE._TOY_STORY)
+    TOY_STORY = (DATASET == DATASET_TYPE.TOY_STORY)
     INTERNAL_BENCHMARK = False
     PLOT_GRADS = False
     DATA_SCALE = 1.0

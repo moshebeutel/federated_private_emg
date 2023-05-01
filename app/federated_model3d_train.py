@@ -72,20 +72,19 @@ def single_train():
 
     if Config.CIFAR10_DATA:
         loaders, cls_partitions = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
-                                     classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
+                                                     classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
         utils.CIFAR10_USER_LOADERS = \
             {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
              for user, train_loader, validation_loader, test_loader in
              zip(utils.all_users_list, loaders[0], loaders[1], loaders[2])}
 
         utils.CIFAR10_USER_CLS_PARTITIONS = \
-            {user: (cls,prb) for (user, cls, prb) in
+            {user: (cls, prb) for (user, cls, prb) in
              zip(utils.all_users_list, cls_partitions['class'], cls_partitions['prob'])}
 
         print('Public Class Partitions')
         for u in public_users:
             print(u, ':', utils.CIFAR10_USER_CLS_PARTITIONS[u])
-
 
     gep = None
     if Config.USE_GEP:
@@ -117,7 +116,6 @@ def single_train():
                           test_user_list=test_user_list,
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
-                          dp_params=dp_params if Config.ADD_DP_NOISE else None,
                           gep=None if not Config.USE_GEP else gep,
                           log2wandb=Config.WRITE_TO_WANDB,
                           output_fn=logger.info)

@@ -91,14 +91,11 @@ def create_public_dataset(public_users: str or list[str]):
 
 
 def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams,
-                                 dp_params: DpParams = None,
                                  gep=None,
-                                 attach_gep_to_model_fn=None,
                                  output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
     sample_fn = random.choices if Config.SAMPLE_CLIENTS_WITH_REPLACEMENT else random.sample
     clients_in_epoch = sample_fn(train_user_list, k=Config.NUM_CLIENT_AGG)
-    device = next(model.parameters()).device
 
     optimizer.zero_grad()
 
@@ -193,9 +190,8 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
 
 def federated_train_model(model, loss_fn, train_user_list, validation_user_list, test_user_list, num_epochs,
-                          internal_train_params: TrainParams, dp_params=None,
+                          internal_train_params: TrainParams,
                           gep: GEP = None,
-                          # attach_gep_to_model_fn=None,
                           log2wandb=False,
                           output_fn=lambda s: None):
     assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
@@ -217,7 +213,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             federated_train_single_epoch(model=model, loss_fn=loss_fn, optimizer=optimizer,
                                          train_user_list=train_user_list,
                                          train_params=internal_train_params,
-                                         dp_params=dp_params,
                                          gep=gep)
 
         model.eval()
