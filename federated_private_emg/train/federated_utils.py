@@ -1,20 +1,16 @@
-import copy
+import gc
 import gc
 import os
 import random
-
 import torch
 import wandb
-
 from common import utils
 from common.config import Config
 from common.utils import init_data_loaders, labels_to_consecutive, \
-    create_toy_data, USERS_BIASES, USERS_VARIANCES
-from differential_privacy.params import DpParams
+    create_toy_data, USERS_BIASES, USERS_VARIANCES, CIFAR10_CLASSES_NAMES, get_users_list_for_class
 from fed_priv_models.custom_sequential import init_model
 from fed_priv_models.gep import GEP
 from train.params import TrainParams
-from train.train_objects import TrainObjects
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
 
 
@@ -216,7 +212,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                          gep=gep)
 
         model.eval()
-        val_losses, val_accs = [], []
+        val_losses, val_accs = [], {}
         for i, u in enumerate(validation_user_list):
             validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
                                                   datasize=Config.BATCH_SIZE * 4,
@@ -232,26 +228,27 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 print('User', i, u, 'class partition ', utils.CIFAR10_USER_CLS_PARTITIONS[u],
                       'Validation Loss', '%.3f' % loss, 'acc', acc)
             val_losses.append(float(loss))
-            val_accs.append(float(acc))
-            # if log2wandb:
-            #     wandb.log({
-            #         f'User {u} Validation Loss': loss
-            #     })
+            val_accs[u] = float(acc)
 
-            # val_loss += float(loss) / float(len(validation_user_list))
-            # val_acc += float(acc) / float(len(validation_user_list))
+        # if log2wandb:
+        #     wandb.log({
+        #         f'User {u} Validation Loss': loss
+        #     })
 
-            t_losses = torch.tensor(val_losses)
-            t_accs = torch.tensor(val_accs)
-            val_loss = t_losses.mean()
-            val_acc = t_accs.mean()
-            val_loss_std = t_losses.std()
-            val_acc_std = t_losses.std()
-            # Release memory
-            del loss, acc, validation_loader, t_accs, t_losses
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        # val_loss += float(loss) / float(len(validation_user_list))
+        # val_acc += float(acc) / float(len(validation_user_list))
+
+        t_losses = torch.tensor(val_losses)
+        t_accs = torch.tensor(list(val_accs.values()), dtype=torch.float)
+        val_loss = t_losses.mean()
+        val_acc = t_accs.mean()
+        val_loss_std = t_losses.std()
+        val_acc_std = t_losses.std()
+        # Release memory
+        del loss, acc, validation_loader, t_accs, t_losses, val_losses
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
@@ -263,6 +260,16 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             print(loss_str)
         else:
             print(loss_str + acc_str)
+
+        for cls, cls_name in enumerate(CIFAR10_CLASSES_NAMES):
+            users_for_class = get_users_list_for_class(cls, validation_user_list)
+            t_accs = torch.tensor([val_accs[u] for u in users_for_class], dtype=torch.float)
+            m = t_accs.mean().item()
+            std = t_accs.std().item()
+            print(f'Acc for class {cls} {cls_name} mean: {m}, std: {std}')
+
+        print([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
+
 
         if log2wandb:
             wandb.log({
@@ -286,6 +293,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
     # Test Eval
     test_loss, test_acc = 0, 0
+    test_accs = {}
     for u in test_user_list:
         test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
                                         datasize=Config.BATCH_SIZE * 4,
@@ -294,5 +302,13 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         loss, acc = run_single_epoch(model=model, loader=test_loader, criterion=loss_fn, train_params=eval_params)
         test_loss += loss / len(test_user_list)
         test_acc += acc / len(test_user_list)
+        test_accs[u] = acc
+
+    for cls, cls_name in enumerate(CIFAR10_CLASSES_NAMES):
+        users_for_class = get_users_list_for_class(cls, test_user_list)
+        t_accs = torch.tensor([test_accs[u] for u in users_for_class], dtype=torch.float)
+        m = t_accs.mean().item()
+        std = t_accs.std().item()
+        print(f'Acc for class {cls} {cls_name} mean: {m}, std: {std}')
 
     output_fn(f'Federated Train Finished Test Loss {test_loss} Test Acc {test_acc}')

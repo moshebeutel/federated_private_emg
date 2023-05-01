@@ -81,9 +81,15 @@ if Config.CIFAR10_DATA:
     CIFAR10_TEST_LOADER = torch.utils.data.DataLoader(test_set, batch_size=Config.BATCH_SIZE, shuffle=False)
     CIFAR10_LOADERS = {'train': CIFAR10_TRAIN_LOADER, 'validation': CIFAR10_VALIDATION_LOADER,
                        'test': CIFAR10_TEST_LOADER}
-
     CIFAR10_USER_LOADERS = {}
     CIFAR10_USER_CLS_PARTITIONS = {}
+    CIFAR10_CLASSES_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+    CLASSES_OF_PUBLIC_USERS = []
+
+    def get_users_list_for_class(cls: int, from_users: list[str] = None) -> list[str]:
+        subset_of = CIFAR10_USER_CLS_PARTITIONS.keys() if from_users is None else from_users
+        l_cls = [u for u in subset_of if cls in CIFAR10_USER_CLS_PARTITIONS[u][0]]
+        return l_cls
 
 
 class SimpleGlobalCounter:

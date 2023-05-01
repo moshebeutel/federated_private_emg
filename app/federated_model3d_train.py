@@ -83,6 +83,8 @@ def single_train():
              zip(utils.all_users_list, cls_partitions['class'], cls_partitions['prob'])}
 
         print('Public Class Partitions')
+        utils.CLASSES_OF_PUBLIC_USERS = [utils.CIFAR10_USER_CLS_PARTITIONS[u][0][0] for u in public_users]
+        print(utils.CLASSES_OF_PUBLIC_USERS)
         for u in public_users:
             print(u, ':', utils.CIFAR10_USER_CLS_PARTITIONS[u])
 
