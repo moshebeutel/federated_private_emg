@@ -90,7 +90,7 @@ def single_train():
 
     gep = None
     if Config.USE_GEP:
-        public_inputs, public_targets = create_public_dataset(public_users=public_users)
+        public_inputs, public_targets = None, None #  create_public_dataset(public_users=public_users)
 
         batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users)
 

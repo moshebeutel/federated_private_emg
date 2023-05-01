@@ -96,16 +96,16 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
     # print('\n==> Creating GEP class instance')
     gep = GEP(num_bases, batch_size, clip0, clip1, power_iter)
     ## attach auxiliary data to GEP instance
-    public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
+    # public_inputs, public_targets = public_inputs.to(device), public_targets.to(device)
     gep.public_users = public_users
-    gep.public_inputs = public_inputs
-    gep.public_targets = public_targets
-    gep.loader = torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(public_inputs, public_targets),
-            shuffle=False,
-            batch_size=batch_size,
-            num_workers=Config.NUM_WORKERS
-        )
+    # gep.public_inputs = public_inputs
+    # gep.public_targets = public_targets
+    # gep.loader = torch.utils.data.DataLoader(
+    #         torch.utils.data.TensorDataset(public_inputs, public_targets),
+    #         shuffle=False,
+    #         batch_size=batch_size,
+    #         num_workers=Config.NUM_WORKERS
+    #     )
 
     net = extend(net)
 
