@@ -1,34 +1,13 @@
 from __future__ import annotations
-
 from dataclasses import astuple
-from typing import Callable
 
 from backpack import backpack, extend
 from backpack.extensions import BatchGrad, BatchL2Grad
 import torch
-import wandb
 from collections.abc import Callable
 from common.config import Config
-from common.utils import calc_grad_norm
 from differential_privacy.params import DpParams
 from fed_priv_models.gep import GEP
-
-
-def add_dp_noise(model,
-                 params: DpParams = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE,
-                                             dp_sigma=Config.DP_SIGMA,
-                                             dp_C=Config.DP_C)):
-    dp_lot, dp_sigma, dp_C = astuple(params)
-    grad_norm = calc_grad_norm(model)
-
-    for p in model.parameters():
-        # Clip gradients
-        p.grad /= max(1, grad_norm / dp_C)
-        # Add DP noise to gradients
-        noise = torch.normal(mean=0, std=dp_sigma * dp_C, size=p.grad.size(), device=p.device)
-        # noise = torch.randn_like(p.grad) * dp_sigma * dp_C
-        p.grad += noise
-        p.grad /= dp_lot  # Averaging over lot
 
 
 def add_dp_noise_using_per_sample(model,
@@ -123,7 +102,7 @@ def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tens
         num_param_list = num_param_list + [num_p - sum(num_param_list)]
         return num_param_list
 
-    # print(f'\n==> Dividing {num_params} parameters in to {num_groups} groups')
+    print(f'\n==> Dividing {num_params} parameters in to {num_groups} groups')
     gep.num_param_list = group_params(num_params, num_groups)
 
     gep.num_params = num_params

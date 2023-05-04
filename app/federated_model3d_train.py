@@ -1,5 +1,4 @@
 import logging
-import os
 
 import torch.nn
 
@@ -8,11 +7,25 @@ from common import utils
 from common.config import Config
 from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
     test_user_list, gen_random_loaders
+from differential_privacy.accountant_utils import get_sigma, print_accountant_params
 from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
 from fed_priv_models.custom_sequential import init_model
-from train.federated_utils import federated_train_model, create_public_dataset
+from train.federated_utils import federated_train_model
 from train.params import TrainParams
+
+
+def get_exp_name_():
+    sigma0 = '%.3f' % Config.GEP_SIGMA0
+    sigma1 = '%.3f' % Config.GEP_SIGMA1
+    clip0 = '%.3f' % Config.GEP_CLIP0
+    clip1 = '%.3f' % Config.GEP_CLIP1
+    # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+    # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} ' \
+    #            f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
+    #            f' residual gradients {Config.GEP_USE_RESIDUAL}'
+    exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1} sigma=[{sigma0},{sigma1}] residual gradients {Config.GEP_USE_RESIDUAL}'
+    return exp_name
 
 
 def main():
@@ -23,27 +36,32 @@ def main():
 
     q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
 
-    if Config.USE_GEP:
-        sigma0 = '%.3f' % Config.GEP_SIGMA0
-        sigma1 = '%.3f' % Config.GEP_SIGMA1
-        clip0 = '%.3f' % Config.GEP_CLIP0
-        clip1 = '%.3f' % Config.GEP_CLIP1
-        # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} ' \
-                   f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
-                   f' residual gradients {Config.GEP_USE_RESIDUAL}'
-        # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
-        # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-    elif Config.USE_SGD_DP:
-        dp_sigma = '%.3f' % Config.DP_SIGMA
-        dp_c = '%.3f' % Config.DP_C
-        exp_name = f'EMG SGD_DP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
-        # exp_name = f'High Dim SGD_DP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
+    # if Config.USE_GEP:
+    #     sigma0 = '%.3f' % Config.GEP_SIGMA0
+    #     sigma1 = '%.3f' % Config.GEP_SIGMA1
+    #     clip0 = '%.3f' % Config.GEP_CLIP0
+    #     clip1 = '%.3f' % Config.GEP_CLIP1
+    #     # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+    #     exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} ' \
+    #                f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
+    #                f' residual gradients {Config.GEP_USE_RESIDUAL}'
+    #     # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
+    #     # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
+    # elif Config.USE_SGD_DP:
+    #     dp_sigma = '%.3f' % Config.DP_SIGMA
+    #     dp_c = '%.3f' % Config.DP_C
+    #     exp_name = f'EMG SGD_DP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
+    #     # exp_name = f'High Dim SGD_DP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
     # exp_name = utils.get_exp_name('TOY STORY Federated')
     # logger = utils.config_logger(f'{exp_name}_logger',
     #                              level=logging.INFO, log_folder='../log/')
     # logger.info(exp_name)
+    update_accountant_params()
+
+    exp_name = get_exp_name_()
+
     print(exp_name)
+
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         config_dict = Config.to_dict()
@@ -57,11 +75,12 @@ def main():
                             'test_user_list': test_user_list})
         wandb.config.update(config_dict)
 
-    single_train()
+    single_train(exp_name)
 
 
-def single_train():
-    exp_name = utils.get_exp_name(os.path.basename(__file__)[:-3])
+def single_train(exp_name):
+
+
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.INFO, log_folder='../log/')
     logger.info(exp_name)
@@ -106,6 +125,7 @@ def single_train():
                                          public_inputs=public_inputs, public_targets=public_targets,
                                          public_users=public_users)
 
+
     dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
                          dp_C=Config.DP_C)
 
@@ -126,30 +146,50 @@ def single_train():
                           output_fn=logger.info)
 
 
+def update_accountant_params():
+    sampling_prob = Config.NUM_CLIENT_AGG / Config.NUM_CLIENTS_TRAIN
+    steps = Config.NUM_EPOCHS  #int(Config.NUM_EPOCHS / sampling_prob)
+    print(f'steps {steps}')
+    print(f'sampling prob {sampling_prob}')
+    if Config.USE_GEP:
+        sigma, eps = get_sigma(sampling_prob, steps, Config.DP_EPSILON, Config.DP_DELTA, rgp=Config.GEP_USE_RESIDUAL)
+        Config.GEP_SIGMA0 = sigma
+        Config.GEP_SIGMA1 = sigma
+        print_accountant_params()
+
+
 def sweep_train(config=None):
+
+    update_accountant_params()
+
+    exp_name = get_exp_name_()
 
     with wandb.init(config=config):
         config = wandb.config
         Config.EPOCHS = 100
         Config.GEP_CLIP0 = config.clip
         Config.GEP_CLIP1 = config.clip / 5.0
-        Config.GEP_SIGMA0 = config.sigma
-        Config.GEP_SIGMA1 = config.sigma
+        # Config.GEP_SIGMA0 = config.sigma
+        # Config.GEP_SIGMA1 = config.sigma
+        Config.DP_EPSILON = config.epsilon
         Config.GEP_USE_RESIDUAL = (config.use_residuals == 1)
 
-        sigma0 = '%.3f' % Config.GEP_SIGMA0
-        sigma1 = '%.3f' % Config.GEP_SIGMA1
-        clip0 = '%.3f' % Config.GEP_CLIP0
-        clip1 = '%.3f' % Config.GEP_CLIP1
+        # sigma0 = '%.3f' % Config.GEP_SIGMA0
+        # sigma1 = '%.3f' % Config.GEP_SIGMA1
+        # clip0 = '%.3f' % Config.GEP_CLIP0
+        # clip1 = '%.3f' % Config.GEP_CLIP1
 
-        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1} sigma=[{sigma0},{sigma1}] residual gradients {Config.GEP_USE_RESIDUAL}'
+        # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1} sigma=[{sigma0},{sigma1}] residual gradients {Config.GEP_USE_RESIDUAL}'
         wandb.log({'name': exp_name})
         # config.LEARNING_RATE = config.learning_rate
         # config.BATCH_SIZE = config.batch_size
         config.update(Config.to_dict())
-        single_train()
+        single_train(exp_name)
 
 def run_sweep():
+
+    assert Config.WRITE_TO_WANDB, f'sweep run expects wandb. Got Config.WRITE_TO_WANDB={Config.WRITE_TO_WANDB}'
+
     sweep_config = {
         'method': 'grid'
     }
@@ -176,10 +216,13 @@ def run_sweep():
         #     'values': [128, 256, 512]
         # },
         'clip': {
-            'values': [1.0, 0.01, 0.1]
+            'values': [5.0, 1.0, 0.1, 0.01]
         },
-        'sigma': {
-            'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
+        # 'sigma': {
+        #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
+        # },
+        'epsilon': {
+            'values': [1.0, 3.0, 8.0]
         },
         'use_residuals': {
             'values': [0, 1]
@@ -192,5 +235,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()

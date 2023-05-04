@@ -5,6 +5,7 @@ from torchvision.models import ResNet18_Weights
 
 from common.config import Config
 from fed_priv_models.pad_operators import Reshape3Bands, PadBeforeLast, PadLastDimCircular, Squeeze
+from fed_priv_models.resnet_cifar import resnet20
 
 
 def init_model():
@@ -13,25 +14,18 @@ def init_model():
         # A simple linear 2-layer Toy model
         model = toy_model()
     elif Config.CIFAR10_DATA:
-        model = simple_mlp_cls()
+        # model = simple_mlp_cls()
+        model = resnet20()
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
         # Model3d
         model = model3d()
     # Init model weights
     for m in model.modules():
-        if isinstance(m, nn.Conv3d):
+        if isinstance(m, nn.Conv3d) or isinstance(m, nn.Conv2d) or isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
             torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Conv2d):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Conv1d):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Linear):
-            torch.nn.init.kaiming_normal_(m.weight)
-            m.bias.data.zero_()
+            if m.bias is not None:
+                m.bias.data.zero_()
     return model
 
 

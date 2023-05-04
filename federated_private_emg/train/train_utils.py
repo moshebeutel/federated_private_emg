@@ -15,7 +15,8 @@ from tqdm import tqdm
 # from common.config import Config
 from common.utils import labels_to_consecutive, flatten_tensor
 from differential_privacy.params import DpParams
-from differential_privacy.utils import add_dp_noise, per_sample_gradient_fwd_bwd
+from differential_privacy.utils import per_sample_gradient_fwd_bwd
+from differential_privacy.accountant_utils import add_dp_noise
 from fed_priv_models.gep import GEP
 from train.params import TrainParams
 from train.train_objects import TrainObjects
@@ -263,6 +264,8 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
 
     # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
+    del batch_grad_list
+    gc.collect()
     # clean_grad = gep.get_approx_grad(clipped_theta) + residual_grad
     if Config.ADD_DP_NOISE:
         # Perturbation
@@ -304,7 +307,7 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         if accumulated_grads is not None:
             accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
         offset += numel
-    del noisy_grad, batch_grad_list
+    del noisy_grad
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

@@ -13,10 +13,10 @@ class Config:
     USE_GROUPNORM = False
     USE_DROPOUT = False
     DEVICE = 'cpu'
-    BATCH_SIZE = 16
-    NUM_EPOCHS = 1000
+    BATCH_SIZE = 4
+    NUM_EPOCHS = 100
     EARLY_STOP_INCREASING_LOSS_COUNT = 10
-    NUM_WORKERS = 2
+    NUM_WORKERS = 1
     OPTIMIZER_TYPE = 'sgd'
     LEARNING_RATE = 0.01
 
@@ -33,7 +33,7 @@ class Config:
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10'])
     DATASET = DATASET_TYPE.CIFAR10
 
-    WRITE_TO_WANDB = True
+    WRITE_TO_WANDB = False
 
     # FL
     NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 4, 96, 500
@@ -54,11 +54,11 @@ class Config:
     USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE.SGD_DP)
     ADD_DP_NOISE = True
     LOT_SIZE_IN_BATCHES = 5
-    DP_EPSILON = 1.0
+    DP_EPSILON = 8.0
     DP_DELTA = 1e-5
 
     # GEP
-    GEP_NUM_BASES = 1
+    GEP_NUM_BASES = 10
     GEP_CLIP0 = 0.1  # 10.0  # 50
     GEP_CLIP1 = 0.02  # 20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
@@ -66,7 +66,7 @@ class Config:
     GEP_SIGMA0 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_SIGMA1 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_POWER_ITER = 1
-    GEP_NUM_GROUPS = 10
+    GEP_NUM_GROUPS = 3
     GEP_USE_RESIDUAL = True
 
     # DP_SGD

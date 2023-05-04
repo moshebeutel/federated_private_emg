@@ -16,7 +16,8 @@ from common.utils import flatten_tensor
 def orthogonalize(matrix):
     n, m = matrix.shape
     for i in range(m):
-        # Normalize the i'th column
+        # print(f'Normalize the {i}-th column')
+        #
         col = matrix[:, i: i + 1]
         col /= torch.sqrt(torch.sum(col ** 2))
         # Project it on the rest and remove it
@@ -68,8 +69,10 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     # print(pub_grad.shape[1], num_bases)
     L = torch.normal(0, 1.0, size=(pub_grad.shape[1], num_bases), device=pub_grad.device)
     for i in range(power_iter):
+        # print('get bases: iter', i)
         R = torch.matmul(pub_grad, L)  # n x k
         L = torch.matmul(pub_grad.T, R)  # p x k
+        # print(R,L)
         orthogonalize(L)
     error_rate = check_approx_error(L, pub_grad)
     return L, num_bases, error_rate
@@ -112,7 +115,7 @@ class GEP(nn.Module):
             return torch.cat(grad_list)
 
     def get_anchor_gradients(self, net, loss_func):
-        # print('get_anchor_gradient')
+        print('get_anchor_gradient')
         # device = next(net.parameters()).device
         # for inputs, targets in self.loader:
         #     inputs, targets = inputs.to(device), targets.to(device)
@@ -136,11 +139,11 @@ class GEP(nn.Module):
 
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
-        # print('get_anchor_space')
+        print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
         # if self.selected_bases_list \
         # else torch.ones((self.batch_size, self.num_params))
-        # print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
+        print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
         with torch.no_grad():
             num_param_list = self.num_param_list
 
@@ -157,11 +160,11 @@ class GEP(nn.Module):
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
                 pub_grad = anchor_grads[:, offset:offset + num_param]
-                # print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
+                print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
                 offset += num_param
 
                 num_bases = num_bases_list[i]
-
+                print('before get bases. num_bases', num_bases)
                 selected_bases, num_bases, pub_error = get_bases(pub_grad, num_bases, self.power_iter, logging)
                 pub_errs.append(pub_error)
 
@@ -170,7 +173,7 @@ class GEP(nn.Module):
                 del pub_grad, pub_error
 
             self.selected_bases_list = selected_bases_list
-            # print(f'selected bases list len {len(self.selected_bases_list)}')
+            print(f'selected bases list len {len(self.selected_bases_list)}')
             # print('self.selected_bases_list', self.selected_bases_list)
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs

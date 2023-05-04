@@ -8,6 +8,7 @@ from common import utils
 from common.config import Config
 from common.utils import init_data_loaders, labels_to_consecutive, \
     create_toy_data, USERS_BIASES, USERS_VARIANCES, CIFAR10_CLASSES_NAMES, get_users_list_for_class
+from differential_privacy.accountant_utils import print_accountant_params
 from fed_priv_models.custom_sequential import init_model
 from fed_priv_models.gep import GEP
 from train.params import TrainParams
@@ -245,11 +246,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         val_acc = t_accs.mean()
         val_loss_std = t_losses.std()
         val_acc_std = t_losses.std()
-        # Release memory
-        del loss, acc, validation_loader, t_accs, t_losses, val_losses
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
@@ -263,6 +260,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             print(loss_str + acc_str)
 
         print_acc_per_cls(user_accs=val_accs, user_list=validation_user_list)
+
+        # Release memory
+        del loss, acc, validation_loader, t_accs, t_losses, val_losses, val_accs
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         print([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
@@ -288,6 +291,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 bp.data = p.data
         if loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             break
+
+        print_accountant_params()
 
     # Test Eval
     if Config.TEST_AT_END:
