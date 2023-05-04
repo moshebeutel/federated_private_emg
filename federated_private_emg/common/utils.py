@@ -37,11 +37,11 @@ DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float
                          requires_grad=False) * Config.DATA_SCALE
 
 if Config.TOY_STORY or Config.CIFAR10_DATA:
-    train_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
-    public_users = [('%d' % i).zfill(3) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
-    validation_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
+    train_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
+    public_users = [('%d' % i).zfill(4) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
+    validation_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
                                                                Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1)]
-    test_user_list = [('%d' % i).zfill(3) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
+    test_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
                                                          Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL +
                                                          Config.NUM_CLIENTS_TEST + 1)]
 else:
@@ -323,7 +323,7 @@ def init_data_loaders(datasets_folder_name,
     assert datasets, 'Given empty datasets list'
     for dataset in datasets:
         if Config.CIFAR10_DATA:
-            u = datasets_folder_name[-3:]
+            u = datasets_folder_name[-4:]
             loader = CIFAR10_USER_LOADERS[u][dataset]
         else:
             X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt',

@@ -200,6 +200,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
     best_loss = 100000
     loss_increase_count = 0
+    best_model = init_model()
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
     for epoch in range(num_epochs):
@@ -261,12 +262,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         else:
             print(loss_str + acc_str)
 
-        for cls, cls_name in enumerate(CIFAR10_CLASSES_NAMES):
-            users_for_class = get_users_list_for_class(cls, validation_user_list)
-            t_accs = torch.tensor([val_accs[u] for u in users_for_class], dtype=torch.float)
-            m = t_accs.mean().item()
-            std = t_accs.std().item()
-            print(f'Acc for class {cls} {cls_name} mean: {m}, std: {std}')
+        print_acc_per_cls(user_accs=val_accs, user_list=validation_user_list)
 
         print([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
@@ -288,27 +284,44 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             loss_increase_count += 1
             print('loss_increase_count', loss_increase_count)
 
+            for bp, p in zip(best_model.parameters(), model.parameters()):
+                bp.data = p.data
         if loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             break
 
     # Test Eval
-    test_loss, test_acc = 0, 0
-    test_accs = {}
-    for u in test_user_list:
-        test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                        datasize=Config.BATCH_SIZE * 4,
-                                        datasets=['test'],
-                                        output_fn=lambda s: None)
-        loss, acc = run_single_epoch(model=model, loader=test_loader, criterion=loss_fn, train_params=eval_params)
-        test_loss += loss / len(test_user_list)
-        test_acc += acc / len(test_user_list)
-        test_accs[u] = acc
+    if Config.TEST_AT_END:
+        best_model.eval()
+        test_loss, test_acc = 0, 0
+        test_accs = {}
+        for u in test_user_list:
+            test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                            datasize=Config.BATCH_SIZE * 4,
+                                            datasets=['test'],
+                                            output_fn=lambda s: None)
+            loss, acc = run_single_epoch(model=best_model, loader=test_loader, criterion=loss_fn,
+                                         train_params=eval_params)
+            test_loss += loss / len(test_user_list)
+            test_acc += acc / len(test_user_list)
+            test_accs[u] = acc
+        #
+        # for cls, cls_name in enumerate(CIFAR10_CLASSES_NAMES):
+        #     users_for_class = get_users_list_for_class(cls, test_user_list)
+        #     t_accs = torch.tensor([test_accs[u] for u in users_for_class], dtype=torch.float)
+        #     m = t_accs.mean().item()
+        #     std = t_accs.std().item()
+        #     print(f'Acc for class {cls} {cls_name} mean: {m}, std: {std}')
+        #
+        print_acc_per_cls(user_accs=test_accs, user_list=test_user_list)
 
+        output_fn(f'Test Finished. Test Loss {test_loss} Test Acc {test_acc}')
+    output_fn(f'Federated Train Finished')
+
+
+def print_acc_per_cls(user_accs: dict[str], user_list):
     for cls, cls_name in enumerate(CIFAR10_CLASSES_NAMES):
-        users_for_class = get_users_list_for_class(cls, test_user_list)
-        t_accs = torch.tensor([test_accs[u] for u in users_for_class], dtype=torch.float)
-        m = t_accs.mean().item()
-        std = t_accs.std().item()
+        users_for_class = get_users_list_for_class(cls, user_list)
+        t_accs = torch.tensor([user_accs[u] for u in users_for_class], dtype=torch.float)
+        m = '%.3f' % (t_accs.mean().item())
+        std = '%.3f' % (t_accs.std().item())
         print(f'Acc for class {cls} {cls_name} mean: {m}, std: {std}')
-
-    output_fn(f'Federated Train Finished Test Loss {test_loss} Test Acc {test_acc}')

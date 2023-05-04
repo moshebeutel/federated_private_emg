@@ -29,7 +29,10 @@ def main():
         clip0 = '%.3f' % Config.GEP_CLIP0
         clip1 = '%.3f' % Config.GEP_CLIP1
         # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
+        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} ' \
+                   f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
+                   f' residual gradients {Config.GEP_USE_RESIDUAL}'
+        # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
         # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
     elif Config.USE_SGD_DP:
         dp_sigma = '%.3f' % Config.DP_SIGMA
@@ -124,16 +127,27 @@ def single_train():
 
 
 def sweep_train(config=None):
-    exp_name = utils.get_exp_name(os.path.basename(__file__)[:-3])
+
     with wandb.init(config=config):
         config = wandb.config
+        Config.EPOCHS = 100
+        Config.GEP_CLIP0 = config.clip
+        Config.GEP_CLIP1 = config.clip / 5.0
+        Config.GEP_SIGMA0 = config.sigma
+        Config.GEP_SIGMA1 = config.sigma
+        Config.GEP_USE_RESIDUAL = (config.use_residuals == 1)
 
-        config.LEARNING_RATE = config.learning_rate
-        config.BATCH_SIZE = config.batch_size
-        config.EPOCHS = 50
+        sigma0 = '%.3f' % Config.GEP_SIGMA0
+        sigma1 = '%.3f' % Config.GEP_SIGMA1
+        clip0 = '%.3f' % Config.GEP_CLIP0
+        clip1 = '%.3f' % Config.GEP_CLIP1
 
+        exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1} sigma=[{sigma0},{sigma1}] residual gradients {Config.GEP_USE_RESIDUAL}'
+        wandb.log({'name': exp_name})
+        # config.LEARNING_RATE = config.learning_rate
+        # config.BATCH_SIZE = config.batch_size
+        config.update(Config.to_dict())
         single_train()
-
 
 def run_sweep():
     sweep_config = {
@@ -155,11 +169,20 @@ def run_sweep():
     #     })
 
     parameters_dict.update({
-        'learning_rate': {
-            'values': [0.00001, 0.0001, 0.001, 0.01, 0.1]
+        # 'learning_rate': {
+        #     'values': [0.00001, 0.0001, 0.001, 0.01, 0.1]
+        # },
+        # 'batch_size': {
+        #     'values': [128, 256, 512]
+        # },
+        'clip': {
+            'values': [1.0, 0.01, 0.1]
         },
-        'batch_size': {
-            'values': [128, 256, 512]
+        'sigma': {
+            'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
+        },
+        'use_residuals': {
+            'values': [0, 1]
         }
     })
 
@@ -169,5 +192,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    main()
-    # run_sweep()
+    # main()
+    run_sweep()

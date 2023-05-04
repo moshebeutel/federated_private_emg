@@ -1,11 +1,10 @@
 import torch.nn
+import torchvision
 from torch import nn
+from torchvision.models import ResNet18_Weights
 
 from common.config import Config
 from fed_priv_models.pad_operators import Reshape3Bands, PadBeforeLast, PadLastDimCircular, Squeeze
-
-
-
 
 
 def init_model():
@@ -15,6 +14,7 @@ def init_model():
         model = toy_model()
     elif Config.CIFAR10_DATA:
         model = simple_mlp_cls()
+        # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
         # Model3d
         model = model3d()
