@@ -139,11 +139,11 @@ class GEP(nn.Module):
 
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
-        print('get_anchor_space')
+        # print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
         # if self.selected_bases_list \
         # else torch.ones((self.batch_size, self.num_params))
-        print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
+        # print('get_anchor_space. anchor_grads.shape ', anchor_grads.shape)
         with torch.no_grad():
             num_param_list = self.num_param_list
 
@@ -160,11 +160,11 @@ class GEP(nn.Module):
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
                 pub_grad = anchor_grads[:, offset:offset + num_param]
-                print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
+                # print(f'i = {i}, num_param = {num_param}. pub_grad.shape {pub_grad.shape}')
                 offset += num_param
 
                 num_bases = num_bases_list[i]
-                print('before get bases. num_bases', num_bases)
+                # print('before get bases. num_bases', num_bases)
                 selected_bases, num_bases, pub_error = get_bases(pub_grad, num_bases, self.power_iter, logging)
                 pub_errs.append(pub_error)
 

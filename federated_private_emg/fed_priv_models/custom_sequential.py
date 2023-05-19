@@ -14,8 +14,8 @@ def init_model():
         # A simple linear 2-layer Toy model
         model = toy_model()
     elif Config.CIFAR10_DATA:
-        # model = simple_mlp_cls()
-        model = resnet20()
+        model = simple_mlp_cls()
+        # model = resnet20()
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
         # Model3d

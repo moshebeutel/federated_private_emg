@@ -47,7 +47,6 @@ def sgd_dp_batch(model, batchsize):
     del grad_norm_list
 
 
-
 def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                                 batch_size: int, gep: GEP = None, use_dp_noise: bool = False) -> (float, float):
     assert model.training, 'Model not in train mode'
@@ -93,111 +92,112 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
 
             assert not (bn in bench_grads_plot_list.keys())
             bench_grads_plot_list[bn] = [bp.grad.data.detach()]
+    for epoch in range(Config.NUM_INTERNAL_EPOCHS):
+        # print('internal epoch', epoch)
+        for k, batch in enumerate(loader):
 
-    for k, batch in enumerate(loader):
+            curr_batch_size = batch[1].size(0)
+            if curr_batch_size < batch_size:
+                continue
+            counter += 1
 
-        curr_batch_size = batch[1].size(0)
-        if curr_batch_size < batch_size:
-            continue
-        counter += 1
+            sample_counter += curr_batch_size
+            batch = (t.to(device) for t in batch)
+            emg, labels = batch
 
-        sample_counter += curr_batch_size
-        batch = (t.to(device) for t in batch)
-        emg, labels = batch
+            labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).long().squeeze()
 
-        labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).long().squeeze()
+            optimizer.zero_grad()
+            outputs = model(emg.float())
+            # print('outputs.shape', outputs.shape)
+            loss = criterion(outputs, labels)
+            # print('loss', loss)
+            running_loss += float(loss)
 
-        optimizer.zero_grad()
-        outputs = model(emg.float())
-        # print('outputs.shape', outputs.shape)
-        loss = criterion(outputs, labels)
-        # print('loss', loss)
-        running_loss += float(loss)
+            # print('running_loss', running_loss)
+            if Config.TOY_STORY:
+                pass
+            else:
+                _, predicted = torch.max(outputs.data, 1)
+                # print('predicted', predicted)
+                correct = (predicted == labels).sum().item()
+                # print('correct', correct, ' out of ', predicted.shape)
+                correct_counter += int(correct)
+                del predicted
+            del outputs
 
-        # print('running_loss', running_loss)
-        if Config.TOY_STORY:
-            pass
-        else:
-            _, predicted = torch.max(outputs.data, 1)
-            # print('predicted', predicted)
-            correct = (predicted == labels).sum().item()
-            # print('correct', correct, ' out of ', predicted.shape)
-            correct_counter += int(correct)
-            del predicted
-        del outputs
-
-        if Config.USE_GEP:
-            with backpack(BatchGrad()):
+            if Config.USE_GEP and Config.INTERNAL_BENCHMARK:
+                with backpack(BatchGrad()):
+                    loss.backward()
+            else:
                 loss.backward()
-        else:
-            loss.backward()
-        # print('after backward')
-
-        if Config.INTERNAL_BENCHMARK:
-            bench_optimizer.zero_grad()
-            bench_outputs = bench_model(emg.float())
-            bench_loss = criterion(bench_outputs, labels)
-            bench_loss.backward()
-            del bench_outputs
-
-        if Config.USE_GEP and Config.INTERNAL_BENCHMARK:
-            gep_batch(None, gep, model)
-            # gep_batch(accumulated_grads, gep, model)
-        else:  # No internal GEP
-            lr = optimizer.param_groups[0]['lr']
-            # print('Effective lr', lr)
-            # with torch.no_grad():
-            #     for i, (n, p) in enumerate(model.named_parameters()):
-            #         # accumulated_grads[n] -= p.grad.data
-            #         # accumulated_grads[n] -= (p.grad.data * lr * len(loader))
-            #         accumulated_grads[n] -= (p.grad.data * lr)
-
-        if Config.TOY_STORY and Config.PLOT_GRADS:
-            for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-                assert n in grads_plot_list.keys()
-                grads_plot_list[n].append(p.grad.data.detach())
-
-                assert bn in bench_grads_plot_list.keys()
-                bench_grads_plot_list[bn].append(bp.grad.data.detach())
-
-        # print('Before Step')
-        # with torch.no_grad():
-        #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-        #         diff = p.data - bp.data
-        #         print(diff.abs().max())
-        #         print(p.grad.abs().max())
-        optimizer.step()
-        # print('After Step')
-        # with torch.no_grad():
-        #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-        #         diff = p.data - bp.data
-        #         print(diff.abs().max())
-        #         print(p.grad.abs().max())
-
-        if Config.INTERNAL_BENCHMARK:
-            bench_optimizer.step()
-
-        if Config.TOY_STORY and Config.PLOT_GRADS:
-            losses.append(float(loss))
+            # print('after backward')
 
             if Config.INTERNAL_BENCHMARK:
-                bench_losses.append(float(bench_loss))
-                del bench_loss
-            if Config.PLOT_GRADS:
+                bench_optimizer.zero_grad()
+                bench_outputs = bench_model(emg.float())
+                bench_loss = criterion(bench_outputs, labels)
+                bench_loss.backward()
+                del bench_outputs
+
+            if Config.USE_GEP and Config.INTERNAL_BENCHMARK:
+                gep_batch(None, gep, model)
+                # gep_batch(accumulated_grads, gep, model)
+            else:  # No internal GEP
+                lr = optimizer.param_groups[0]['lr']
+                # print('Effective lr', lr)
+                # with torch.no_grad():
+                #     for i, (n, p) in enumerate(model.named_parameters()):
+                #         # accumulated_grads[n] -= p.grad.data
+                #         # accumulated_grads[n] -= (p.grad.data * lr * len(loader))
+                #         accumulated_grads[n] -= (p.grad.data * lr)
+
+            if Config.TOY_STORY and Config.PLOT_GRADS:
                 for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
-                    assert n in params_plot_list.keys()
-                    params_plot_list[n].append(p.data.detach() - params_plot_list[n][-1])
-                    # params_plot_list[n].append(p.data.detach())
+                    assert n in grads_plot_list.keys()
+                    grads_plot_list[n].append(p.grad.data.detach())
 
-                    assert bn in bench_params_plot_list.keys()
-                    bench_params_plot_list[bn].append(bp.data.detach() - bench_params_plot_list[bn][-1])
-                    # bench_params_plot_list[bn].append(bp.data.detach())
+                    assert bn in bench_grads_plot_list.keys()
+                    bench_grads_plot_list[bn].append(bp.grad.data.detach())
 
-        del labels, emg, batch, loss
+            # print('Before Step')
+            # with torch.no_grad():
+            #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+            #         diff = p.data - bp.data
+            #         print(diff.abs().max())
+            #         print(p.grad.abs().max())
+            optimizer.step()
+            # print('After Step')
+            # with torch.no_grad():
+            #     for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+            #         diff = p.data - bp.data
+            #         print(diff.abs().max())
+            #         print(p.grad.abs().max())
 
-        # Release GPU and CPU memory - or at least try to ;)
-        torch.cuda.empty_cache()
-        gc.collect()
+            if Config.INTERNAL_BENCHMARK:
+                bench_optimizer.step()
+
+            if Config.TOY_STORY and Config.PLOT_GRADS:
+                losses.append(float(loss))
+
+                if Config.INTERNAL_BENCHMARK:
+                    bench_losses.append(float(bench_loss))
+                    del bench_loss
+                if Config.PLOT_GRADS:
+                    for ((n, p), (bn, bp)) in zip(model.named_parameters(), bench_model.named_parameters()):
+                        assert n in params_plot_list.keys()
+                        params_plot_list[n].append(p.data.detach() - params_plot_list[n][-1])
+                        # params_plot_list[n].append(p.data.detach())
+
+                        assert bn in bench_params_plot_list.keys()
+                        bench_params_plot_list[bn].append(bp.data.detach() - bench_params_plot_list[bn][-1])
+                        # bench_params_plot_list[bn].append(bp.data.detach())
+
+            del labels, emg, batch, loss
+
+            # Release GPU and CPU memory - or at least try to ;)
+            torch.cuda.empty_cache()
+            gc.collect()
 
     epoch_loss = running_loss / float(counter)
     epoch_acc = 100 * correct_counter / sample_counter
@@ -252,17 +252,18 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
     return epoch_loss, epoch_acc, None, bench_model, optimizer
     # return epoch_loss, epoch_acc, accumulated_grads, bench_model, optimizer
 
+
 # @profile
 def gep_batch(accumulated_grads, gep, model, batchsize):
     assert gep is not None, f'Config.USE_GEP={Config.USE_GEP} but gep object not provided. gep={gep}'
     batch_grad_list = []
     for p in model.parameters():
         if hasattr(p, 'grad_batch'):
-            # print('p.grad_batch.shape', p.grad_batch.shape)
+            print('p.grad_batch.shape', p.grad_batch.shape)
             batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
             # del p.grad_batch
 
-    # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
+    print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))
     del batch_grad_list
     gc.collect()
@@ -369,7 +370,8 @@ def run_single_epoch(model, loader, criterion,
 
         grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
-        predicted, loss = fwd_bwd_fn(inputs=inputs, labels=labels, model=model, criterion=criterion, optimizer=optimizer,
+        predicted, loss = fwd_bwd_fn(inputs=inputs, labels=labels, model=model, criterion=criterion,
+                                     optimizer=optimizer,
                                      dp_params=dp_params, zero_grad_now=zero_grad_now, grad_step_now=grad_step_now)
         zero_grad_now = not grad_step_now
 
@@ -381,7 +383,6 @@ def run_single_epoch(model, loader, criterion,
         y_pred += ([] if Config.TOY_STORY else predicted.cpu().tolist())
         y_labels += labels.cpu().tolist()
         del labels, inputs, batch
-
 
     # epoch_loss = running_loss / float(counter)
     epoch_loss = running_loss / float(sample_counter)

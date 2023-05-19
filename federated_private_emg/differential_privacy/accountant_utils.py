@@ -299,7 +299,11 @@ def print_accountant_params():
     print('********************')
     print(f'Epsilon {Config.DP_EPSILON}')
     print(f'Delta {Config.DP_DELTA}')
-    print(f'Config.GEP_SIGMA0 {Config.GEP_SIGMA0}')
-    print(f'Config.GEP_SIGMA1 {Config.GEP_SIGMA1}')
-    print(f'Config.GEP_CLIP0 {Config.GEP_CLIP0}')
-    print(f'Config.GEP_CLIP1 {Config.GEP_CLIP1}')
+    if Config.USE_GEP:
+        print(f'Config.GEP_SIGMA0 {Config.GEP_SIGMA0}')
+        print(f'Config.GEP_SIGMA1 {Config.GEP_SIGMA1}')
+        print(f'Config.GEP_CLIP0 {Config.GEP_CLIP0}')
+        print(f'Config.GEP_CLIP1 {Config.GEP_CLIP1}')
+    else:
+        print(f'Config.DP_C {Config.DP_C}')
+        print(f'Config.DP_SIGMA {Config.DP_SIGMA}')

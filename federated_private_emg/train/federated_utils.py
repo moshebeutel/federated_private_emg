@@ -157,7 +157,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                 # print('p.grad', p.grad)
                 # print('p.grad_batch', p.grad_batch)
 
-            if i == len(gep.public_users) - 1:
+            if Config.USE_GEP and i == len(gep.public_users) - 1:
                 gep.get_anchor_space(model, loss_func=loss_fn)
 
             user_loss += loss / Config.NUM_INTERNAL_EPOCHS
@@ -199,8 +199,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                 weight_decay=Config.WEIGHT_DECAY,
                                 momentum=0.9)
 
-    best_loss = 100000
-    loss_increase_count = 0
+    # best_loss = 100000
+    best_epoch_validation_acc = 0.0
+    # loss_increase_count = 0
+    acc_decrease_count = 0
     best_model = init_model()
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
@@ -269,6 +271,14 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         print([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
+        if val_acc < best_epoch_validation_acc:
+            best_epoch_validation_acc = val_acc
+            acc_decrease_count = 0
+            for bp, p in zip(best_model.parameters(), model.parameters()):
+                bp.data = p.data
+        else:
+            acc_decrease_count += 1
+            print('acc_decrease_count', acc_decrease_count)
 
         if log2wandb:
             wandb.log({
@@ -278,18 +288,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 'epoch_validation_acc': val_acc,
                 'epoch_validation_loss_std': val_loss_std,
                 'epoch_validation_acc_std': val_acc_std,
+                'best_epoch_validation_acc': best_epoch_validation_acc
             })
 
-        if val_loss < best_loss:
-            best_loss = val_loss
-            loss_increase_count = 0
-        else:
-            loss_increase_count += 1
-            print('loss_increase_count', loss_increase_count)
-
-            for bp, p in zip(best_model.parameters(), model.parameters()):
-                bp.data = p.data
-        if loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
+        if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             break
 
         print_accountant_params()
