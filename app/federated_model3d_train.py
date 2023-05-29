@@ -188,6 +188,7 @@ def sweep_train(config=None):
 
         Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP if config.dp == 'SGD_DP' else Config.DP_METHOD_TYPE.GEP
         Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
+        Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
         Config.GEP_USE_RESIDUAL = (Config.USE_GEP and config.dp == 'GEP_RESIDUALS')
 
         if Config.USE_GEP:
@@ -199,7 +200,8 @@ def sweep_train(config=None):
         # Config.GEP_SIGMA1 = config.sigma
 
         Config.DP_EPSILON = config.epsilon
-        Config.NUM_CLIENT_AGG = 50 - Config.NUM_CLIENTS_PUBLIC
+        Config.NUM_CLIENT_AGG = config.agg - Config.NUM_CLIENTS_PUBLIC
+        Config.CIFAR10_CLASSES_PER_USE = config.classes_each_user
 
         # sigma0 = '%.3f' % Config.GEP_SIGMA0
         # sigma1 = '%.3f' % Config.GEP_SIGMA1
@@ -254,12 +256,16 @@ def run_sweep():
         # 'use_residuals': {
         #     'values': [0, 1]
         # },
-        # 'agg': {
-        #     'values': [25, 50]
-        # },
+        'agg': {
+            'values': [10, 30]
+        },
         'dp': {
-            'values': ['SGD_DP', 'GEP_RESIDUALS', 'GEP_NO_RESIDUALS']
+            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', ]
+        },
+        'classes_each_user': {
+            'values': [2, 3, 4]
         }
+
 
     })
 

@@ -39,10 +39,10 @@ DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float
 if Config.TOY_STORY or Config.CIFAR10_DATA:
     train_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
     public_users = [('%d' % i).zfill(4) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
-    if not Config.USE_GEP:
-        Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
-        public_users = []
-        Config.NUM_CLIENTS_PUBLIC = 0
+    # if not Config.USE_GEP:
+    #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+    #     public_users = []
+    #     Config.NUM_CLIENTS_PUBLIC = 0
     validation_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
                                                                Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1)]
     test_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
