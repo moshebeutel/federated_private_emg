@@ -304,16 +304,25 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     # config logger
     log_format = '%(asctime)s:%(levelname)s:%(name)s:%(module)s:%(message)s'
     formatter = logging.Formatter(log_format)
-    logging.basicConfig(level=level,
-                        format=log_format,
-                        filename=f'{log_folder}{time.ctime()}_{name}.log',
-                        filemode='w')
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-    handler.setLevel(logging.DEBUG)
-    created_logger = logging.getLogger(name + '_logger')
-    created_logger.addHandler(handler)
-    logging.getLogger(name).setLevel(level)
+    # logging.basicConfig(level=level,
+    #                     format=log_format,
+    #                     filename=f'{log_folder}{time.ctime()}_{name}.log',
+    #                     filemode='w')
+
+    # stream handler
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(level)
+
+    # file handler
+    file_handler = logging.FileHandler(f'{log_folder}{time.ctime()}_{name}.log', mode='w')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
+
+    created_logger = logging.getLogger(name)
+    created_logger.addHandler(stream_handler)
+    created_logger.addHandler(file_handler)
+    created_logger.setLevel(level)
     return created_logger
 
 
@@ -322,7 +331,7 @@ def init_data_loaders(datasets_folder_name,
                       datasets=['train', 'validation', 'test'],
                       batch_size=Config.BATCH_SIZE,
                       num_workers=Config.NUM_WORKERS,
-                      output_fn=print):
+                      output_fn=lambda s: None):
     loaders = []
     assert datasets, 'Given empty datasets list'
     for dataset in datasets:

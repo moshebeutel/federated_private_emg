@@ -7,7 +7,7 @@ from common import utils
 from common.config import Config
 from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
     test_user_list, gen_random_loaders
-from differential_privacy.accountant_utils import get_sigma, print_accountant_params
+from differential_privacy.accountant_utils import get_sigma, accountant_params_string
 from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
 from fed_priv_models.custom_sequential import init_model
@@ -60,7 +60,7 @@ def main():
     # logger = utils.config_logger(f'{exp_name}_logger',
     #                              level=logging.INFO, log_folder='../log/')
     # logger.info(exp_name)
-    update_accountant_params()
+    # update_accountant_params(output_fn=logging.info)
 
     exp_name = get_exp_name_()
 
@@ -84,7 +84,7 @@ def main():
 
 def single_train(exp_name):
     logger = utils.config_logger(f'{exp_name}_logger',
-                                 level=logging.INFO, log_folder='../log/')
+                                 level=logging.DEBUG, log_folder='../log/')
     logger.info(exp_name)
 
     model = init_model()
@@ -147,11 +147,11 @@ def single_train(exp_name):
                           output_fn=logger.info)
 
 
-def update_accountant_params():
+def update_accountant_params(output_fn):
     sampling_prob = Config.NUM_CLIENT_AGG / (Config.NUM_CLIENTS_TRAIN - Config.NUM_CLIENTS_PUBLIC)
     steps = Config.NUM_EPOCHS  # int(Config.NUM_EPOCHS / sampling_prob)
-    print(f'steps {steps}')
-    print(f'sampling prob {sampling_prob}')
+    output_fn(f'steps {steps}')
+    output_fn(f'sampling prob {sampling_prob}')
 
     if Config.DP_METHOD == Config.DP_METHOD_TYPE.NO_DP:
         sigma = 0.0
@@ -169,7 +169,7 @@ def update_accountant_params():
     else:
         Config.DP_SIGMA = sigma
 
-    print_accountant_params()
+    output_fn(accountant_params_string())
 
 
 def sweep_train(config=None):
@@ -184,7 +184,7 @@ def sweep_train(config=None):
         config = wandb.config
         config['clip'] = 0.01
         print(config)
-        Config.EPOCHS = 100
+        Config.EPOCHS = 50
 
         Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP if config.dp == 'SGD_DP' else Config.DP_METHOD_TYPE.GEP
         Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
@@ -200,8 +200,8 @@ def sweep_train(config=None):
         # Config.GEP_SIGMA1 = config.sigma
 
         Config.DP_EPSILON = config.epsilon
-        Config.NUM_CLIENT_AGG = config.agg - Config.NUM_CLIENTS_PUBLIC
-        Config.CIFAR10_CLASSES_PER_USE = config.classes_each_user
+        Config.NUM_CLIENT_AGG = 50 - Config.NUM_CLIENTS_PUBLIC
+        Config.SAMPLE_CLIENTS_WITH_REPLACEMENT = (config.sample_with_replacement == 1)
 
         # sigma0 = '%.3f' % Config.GEP_SIGMA0
         # sigma1 = '%.3f' % Config.GEP_SIGMA1
@@ -253,17 +253,20 @@ def run_sweep():
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
         },
-        # 'use_residuals': {
-        #     'values': [0, 1]
-        # },
-        'agg': {
-            'values': [10, 30]
+        'sample_with_replacement': {
+            'values': [0, 1]
         },
+        # 'agg': {
+        #     'values': [50]
+        # },
         'dp': {
             'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', ]
         },
-        'classes_each_user': {
-            'values': [2, 3, 4]
+        # 'classes_each_user': {
+        #     'values': [3]
+        # },
+        'internal_epochs': {
+            'values': [1, 3, 5]
         }
 
 
@@ -275,5 +278,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()
