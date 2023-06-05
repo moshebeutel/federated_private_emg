@@ -33,7 +33,11 @@ class Config:
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10'])
     DATASET = DATASET_TYPE.CIFAR10
 
-    WRITE_TO_WANDB = True
+    WRITE_TO_WANDB = False
+
+    # GP
+    USE_GP = True
+
 
     # FL
     NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 4, 46, 500
