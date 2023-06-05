@@ -10,8 +10,9 @@ from common.config import Config
 from common.utils import init_data_loaders, labels_to_consecutive, \
     create_toy_data, USERS_BIASES, USERS_VARIANCES, CIFAR10_CLASSES_NAMES, get_users_list_for_class
 from differential_privacy.accountant_utils import accountant_params_string
-from fed_priv_models.custom_sequential import init_model
+from fed_priv_models.model_factory import init_model
 from fed_priv_models.gep import GEP
+from fed_priv_models.pFedGP.utils import build_tree
 from train.params import TrainParams
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
 
@@ -90,6 +91,7 @@ def create_public_dataset(public_users: str or list[str]):
 
 def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, train_params: TrainParams,
                                  gep=None,
+                                 GPs=None,
                                  output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
     sample_fn = random.choices if Config.SAMPLE_CLIENTS_WITH_REPLACEMENT else random.sample
@@ -128,14 +130,22 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
         user_loss, user_acc = 0.0, 0.0
 
+        if Config.USE_GP:
+            assert GPs is not None, f'Config.USE_GP={Config.USE_GP} but GPs is None'
+            assert u in GPs, f'User {u} is not in epoch users {GPs.keys()}'
+            # build tree at each step
+            GPs[u], label_map, _, __ = build_tree(gp=GPs[u], net=local_model, loader=train_loader)
+            GPs[u].train()
+
         loss, acc, _, local_model, local_optimizer = \
             run_single_epoch_keep_grads(model=local_model, optimizer=local_optimizer,
                                         loader=train_loader, criterion=loss_fn,
                                         batch_size=train_params.batch_size,
-                                        gep=gep if Config.USE_GEP else None)
+                                        gep=gep if Config.USE_GEP else None, gp=GPs[u] if Config.USE_GP else None)
 
         output_fn(f'client No.:{i} in epoch user:{u}-loss={loss},acc={acc}')
 
+        # pull gradients from user
         for p, lp in zip(model.parameters(), local_model.parameters()):
             # p.grad.data += (lp.grad.data / num_clients_in_epoch)
             p.grad_batch[i] = lp.grad.data
@@ -149,12 +159,15 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         user_loss += loss / Config.NUM_INTERNAL_EPOCHS
         user_acc += acc / Config.NUM_INTERNAL_EPOCHS
 
-        del loss, acc
-
         epoch_train_loss += user_loss / num_clients_in_epoch
         epoch_train_acc += user_acc / num_clients_in_epoch
 
-        del local_model, train_loader, local_optimizer, user_loss, user_acc
+        # Erase local train resources
+        if Config.USE_GP:
+            del GPs[u].tree
+            GPs[u].tree = None
+        del local_model, train_loader, local_optimizer, user_loss, user_acc, loss, acc
+
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -175,6 +188,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 def federated_train_model(model, loss_fn, train_user_list, validation_user_list, test_user_list, num_epochs,
                           internal_train_params: TrainParams,
                           gep: GEP = None,
+                          GPs=None,
                           log2wandb=False,
                           output_fn=lambda s: None):
     assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
@@ -197,7 +211,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             federated_train_single_epoch(model=model, loss_fn=loss_fn, optimizer=optimizer,
                                          train_user_list=train_user_list,
                                          train_params=internal_train_params,
-                                         gep=gep, output_fn=lambda s: None)  # output_fn)
+                                         gep=gep, GPs=GPs, output_fn=lambda s: None)  # output_fn)
 
         model.eval()
         val_losses, val_accs = [], {}
@@ -262,8 +276,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')
             output_fn(accountant_params_string())
             break
-
-
 
     # Test Eval
     if Config.TEST_AT_END:

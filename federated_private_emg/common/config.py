@@ -37,6 +37,22 @@ class Config:
 
     # GP
     USE_GP = True
+    GP_KERNEL_FUNCTION = 'RBFKernel'
+    assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
+        f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
+    GP_NUM_GIBBS_STEPS_TRAIN = 5
+    GP_NUM_GIBBS_DRAWS_TRAIN = 20
+    GP_NUM_GIBBS_STEPS_TEST = 5
+    GP_NUM_GIBBS_DRAWS_TEST = 30
+    GP_OUTPUTSCALE_INCREASE = 'constant'
+    assert GP_OUTPUTSCALE_INCREASE in ['constant', 'increase', 'decrease'], \
+        f'GP_OUTPUTSCALE_INCREASE={GP_OUTPUTSCALE_INCREASE} and should be one of constant, increase, decrease'
+    GP_OUTPUTSCALE = 8.0
+    GP_LENGTHSCALE = 1.0
+    GP_PREDICT_RATIO = 0.5
+    GP_OBJECTIVE = 'predictive_likelihood'
+    assert GP_OBJECTIVE in ['predictive_likelihood', 'marginal_likelihood'], \
+        f'GP_OBJECTIVE={GP_OBJECTIVE} and should be one of predictive_likelihood, marginal_likelihood '
 
 
     # FL
@@ -74,7 +90,7 @@ class Config:
     GEP_USE_RESIDUAL = True
 
     # DP_SGD
-    DP_C = 0.01 # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
+    DP_C = 0.01  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
     DP_SIGMA = 0.0  # sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # CIFAR10

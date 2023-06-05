@@ -10,7 +10,8 @@ from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user
 from differential_privacy.accountant_utils import get_sigma, accountant_params_string
 from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
-from fed_priv_models.custom_sequential import init_model
+from fed_priv_models.model_factory import init_model
+from fed_priv_models.pFedGP.Learner import pFedGPFullLearner
 from train.federated_utils import federated_train_model
 from train.params import TrainParams
 
@@ -90,9 +91,14 @@ def single_train(exp_name):
     model = init_model()
 
     num_of_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f'Model has {num_of_parameters} trainable parameters')
+    logger.info(f'Model has {num_of_parameters} trainable parameters')
     model.to(Config.DEVICE)
     loss_fn = torch.nn.CrossEntropyLoss() if not Config.TOY_STORY else torch.nn.MSELoss()
+
+    if Config.USE_GP:
+        GPs = {}
+        for u in train_user_list:
+            GPs[u] = pFedGPFullLearner(n_output=Config.CIFAR10_CLASSES_PER_USER)
 
     if Config.CIFAR10_DATA:
         loaders, cls_partitions = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
@@ -143,6 +149,7 @@ def single_train(exp_name):
                           internal_train_params=internal_train_params,
                           num_epochs=Config.NUM_EPOCHS,
                           gep=None if not Config.USE_GEP else gep,
+                          GPs=GPs if Config.USE_GP else None,
                           log2wandb=Config.WRITE_TO_WANDB,
                           output_fn=logger.info)
 
@@ -268,7 +275,6 @@ def run_sweep():
         'internal_epochs': {
             'values': [1, 3, 5]
         }
-
 
     })
 

@@ -1,0 +1,19 @@
+name: base
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pytables
+  - torchvision
+  - pytorch
+  - pytorch-cuda=11.7
+  - pandas
+  - wandb
+  - backpack-for-pytorch
+  - pip
+  - conda=23.1.0
+  - mkl-service
+  - gpytorch
+  - pypolyagamma
+prefix: /home/user1/miniconda3/envs/env_federated_private_emg

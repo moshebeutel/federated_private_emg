@@ -1,0 +1,13 @@
+numpy
+torch==1.13.1
+pandas
+pytables==3.7.0
+wandb
+setuptools
+tqdm
+torchvision
+scikit-learn
+gpytorch
+pypolyagamma
+scipy
+six

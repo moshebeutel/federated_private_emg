@@ -1,3 +1,5 @@
+import logging
+
 import torch.nn
 import torchvision
 from torch import nn
@@ -20,6 +22,7 @@ def init_model():
     else:
         # Model3d
         model = model3d()
+    logging.info(f'Model {model} constructed.  Init model weights.')
     # Init model weights
     for m in model.modules():
         if isinstance(m, nn.Conv3d) or isinstance(m, nn.Conv2d) or isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
