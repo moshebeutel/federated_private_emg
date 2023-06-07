@@ -177,10 +177,10 @@ def topk(true, pred, k):
 
 def to_one_hot(y, dtype=torch.double):
     # convert a single label into a one-hot vector
-    # y_output_onehot = torch.zeros((y.shape[0], y.max().type(torch.IntTensor) + 1), dtype=dtype, device=y.device)
-    # return y_output_onehot.scatter_(1, y.unsqueeze(1), 1)
+    y_output_onehot = torch.zeros((y.shape[0], y.max().type(torch.IntTensor) + 1), dtype=dtype, device=y.device)
+    return y_output_onehot.scatter_(1, y.unsqueeze(1), 1)
 
-    return torch.nn.functional.one_hot(y, num_classes=10)
+    # return torch.nn.functional.one_hot(y, num_classes=10)
 
 
 def CE_loss(y, y_hat, num_classes, reduction='mean'):
@@ -245,7 +245,7 @@ def psd_safe_cholesky(A, upper=False, out=None, jitter=None):
             as 1e-6 (float) or 1e-8 (double)
     """
     try:
-        L = torch.cholesky(A, upper=upper, out=out)
+        L = torch.linalg.cholesky(A, upper=upper, out=out)
         return L
     except RuntimeError as e:
         isnan = torch.isnan(A)

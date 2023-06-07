@@ -52,7 +52,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                                 gp=None,
                                 use_dp_noise: bool = False) -> (float, float):
     assert model.training, 'Model not in train mode'
-    running_loss, correct_counter, sample_counter, counter = 0., 0, 0, 0
+    running_loss, correct_counter, sample_counter = 0., 0, 0
     device = next(model.parameters()).device
 
     bench_model = copy.deepcopy(model)
@@ -99,9 +99,9 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         for k, batch in enumerate(loader):
 
             curr_batch_size = batch[1].size(0)
-            if curr_batch_size < batch_size:
-                continue
-            counter += 1
+            # if curr_batch_size < batch_size:
+            #     continue
+            # counter += 1
 
             sample_counter += curr_batch_size
             batch = (t.to(device) for t in batch)
@@ -194,16 +194,20 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
 
     if Config.USE_GP:
         assert gp is not None, f'Config.USE_GP={Config.USE_GP} but gp is None'
-        loss = gp(X, Y)
-        loss.backward()
-        running_loss += float(loss)
-        optimizer.step()
-        del X, Y, loss
+        loss_from_gp = gp(X, Y)
+        if hasattr(loss_from_gp, 'backward'):
+            loss_from_gp.backward()
+            running_loss += float(loss_from_gp)
+            optimizer.step()
+        else:
+            assert loss_from_gp == 0, f'loss is not a tensor if there was no relevant classes'
+
+        del X, Y, loss_from_gp
         # Release GPU and CPU memory - or at least try to ;)
         torch.cuda.empty_cache()
         gc.collect()
 
-    epoch_loss = running_loss / float(counter)
+    epoch_loss = running_loss / float(sample_counter)
     epoch_acc = 100 * correct_counter / sample_counter
 
     if Config.PLOT_GRADS:
