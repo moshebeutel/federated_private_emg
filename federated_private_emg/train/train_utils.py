@@ -18,6 +18,7 @@ from differential_privacy.params import DpParams
 from differential_privacy.utils import per_sample_gradient_fwd_bwd
 from differential_privacy.accountant_utils import add_dp_noise
 from fed_priv_models.gep import GEP
+from fed_priv_models.pFedGP.utils import build_tree
 from train.params import TrainParams
 from train.train_objects import TrainObjects
 from collections.abc import Callable
@@ -54,6 +55,12 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
     assert model.training, 'Model not in train mode'
     running_loss, correct_counter, sample_counter = 0., 0, 0
     device = next(model.parameters()).device
+    label_map = None
+    if Config.USE_GP:
+        assert gp is not None, f'Config.USE_GP={Config.USE_GP} but gp is None'
+        # build tree at each step
+        gp, label_map, _, __ = build_tree(gp=gp, net=model, loader=loader)
+        gp.train()
 
     bench_model = copy.deepcopy(model)
 
@@ -194,7 +201,11 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
 
     if Config.USE_GP:
         assert gp is not None, f'Config.USE_GP={Config.USE_GP} but gp is None'
-        loss_from_gp = gp(X, Y)
+        assert label_map is not None, f'Config.USE_GP={Config.USE_GP} but label_map is None.' \
+                                      f' build_tree must be called before'
+        offset_labels = torch.tensor([label_map[l.item()] for l in Y], dtype=Y.dtype,
+                                     device=Y.device)
+        loss_from_gp = gp(X, offset_labels)
         if hasattr(loss_from_gp, 'backward'):
             loss_from_gp.backward()
             running_loss += float(loss_from_gp)
@@ -202,7 +213,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
         else:
             assert loss_from_gp == 0, f'loss is not a tensor if there was no relevant classes'
 
-        del X, Y, loss_from_gp
+        del X, Y, loss_from_gp, offset_labels
         # Release GPU and CPU memory - or at least try to ;)
         torch.cuda.empty_cache()
         gc.collect()

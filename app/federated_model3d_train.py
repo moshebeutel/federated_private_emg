@@ -12,6 +12,7 @@ from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
 from fed_priv_models.model_factory import init_model
 from fed_priv_models.pFedGP.Learner import pFedGPFullLearner
+from fed_priv_models.pFedGP.utils import set_seed
 from train.federated_utils import federated_train_model
 from train.params import TrainParams
 
@@ -84,6 +85,7 @@ def main():
 
 
 def single_train(exp_name):
+    set_seed(Config.SEED)
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.DEBUG, log_folder='../log/')
     logger.info(exp_name)

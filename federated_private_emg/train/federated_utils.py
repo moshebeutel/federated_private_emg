@@ -130,12 +130,12 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
         user_loss, user_acc = 0.0, 0.0
 
-        if Config.USE_GP:
-            assert GPs is not None, f'Config.USE_GP={Config.USE_GP} but GPs is None'
-            assert u in GPs, f'User {u} is not in epoch users {GPs.keys()}'
-            # build tree at each step
-            GPs[u], label_map, _, __ = build_tree(gp=GPs[u], net=local_model, loader=train_loader)
-            GPs[u].train()
+        # if Config.USE_GP:
+        #     assert GPs is not None, f'Config.USE_GP={Config.USE_GP} but GPs is None'
+        #     assert u in GPs, f'User {u} is not in epoch users {GPs.keys()}'
+        #     # build tree at each step
+        #     GPs[u], label_map, _, __ = build_tree(gp=GPs[u], net=local_model, loader=train_loader)
+        #     GPs[u].train()
 
         loss, acc, _, local_model, local_optimizer = \
             run_single_epoch_keep_grads(model=local_model, optimizer=local_optimizer,

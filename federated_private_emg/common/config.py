@@ -1,6 +1,7 @@
 from __future__ import annotations
 import inspect
 import os
+from datetime import datetime
 from enum import Enum
 from math import sqrt, log
 
@@ -13,12 +14,15 @@ class Config:
     USE_GROUPNORM = False
     USE_DROPOUT = False
     DEVICE = 'cpu'
-    BATCH_SIZE = 2
+    BATCH_SIZE = 512
     NUM_EPOCHS = 100
+    DETERMINISTIC_SEED = True
+    SEED = 42 if DETERMINISTIC_SEED else int(datetime.now().timestamp())
+
     EARLY_STOP_INCREASING_LOSS_COUNT = 10
     NUM_WORKERS = 1
     OPTIMIZER_TYPE = 'sgd'
-    LEARNING_RATE = 0.01
+    LEARNING_RATE = 0.05
 
     WEIGHT_DECAY = 1e-3
     MOMENTUM = 0.9
@@ -54,21 +58,9 @@ class Config:
     assert GP_OBJECTIVE in ['predictive_likelihood', 'marginal_likelihood'], \
         f'GP_OBJECTIVE={GP_OBJECTIVE} and should be one of predictive_likelihood, marginal_likelihood '
 
-
-    # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 4, 46, 500
-    assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
-        f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
-    assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
-    NUM_CLIENTS_VAL = 100
-    NUM_CLIENTS_TEST = 1000
-    SAMPLE_CLIENTS_WITH_REPLACEMENT = False
-    NUM_INTERNAL_EPOCHS = 1
-    CIFAR10_CLASSES_PER_USER = 2
-
     # DP
     DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['NO_DP', 'SGD_DP', 'GEP'])
-    DP_METHOD = DP_METHOD_TYPE.SGD_DP
+    DP_METHOD = DP_METHOD_TYPE.NO_DP
     USE_GEP = (DP_METHOD == DP_METHOD_TYPE.GEP)
     PUBLIC_USERS_CONTRIBUTE_TO_LEARNING = True
     USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE.SGD_DP)
@@ -76,6 +68,21 @@ class Config:
     LOT_SIZE_IN_BATCHES = 5
     DP_EPSILON = 1.0
     DP_DELTA = 1e-5
+
+    # FL
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 4, 46, 400
+    assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
+        f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
+    assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
+    if not USE_GEP:
+        NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
+
+    NUM_CLIENTS_VAL = 50
+    NUM_CLIENTS_TEST = 50
+    SAMPLE_CLIENTS_WITH_REPLACEMENT = True
+    NUM_INTERNAL_EPOCHS = 1
+    CIFAR10_CLASSES_PER_USER = 2
+
 
     # GEP
     GEP_NUM_BASES = 10

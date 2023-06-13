@@ -315,13 +315,13 @@ def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     stream_handler.setLevel(level)
 
     # file handler
-    file_handler = logging.FileHandler(f'{log_folder}{time.ctime()}_{name}.log', mode='w')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(level)
+    # file_handler = logging.FileHandler(f'{log_folder}{time.ctime()}_{name}.log', mode='w')
+    # file_handler.setFormatter(formatter)
+    # file_handler.setLevel(level)
 
     created_logger = logging.getLogger(name)
-    created_logger.addHandler(stream_handler)
-    created_logger.addHandler(file_handler)
+    # created_logger.addHandler(stream_handler)
+    # created_logger.addHandler(file_handler)
     created_logger.setLevel(level)
     return created_logger
 

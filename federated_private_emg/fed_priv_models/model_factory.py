@@ -4,7 +4,7 @@ import torch.nn
 import torchvision
 from torch import nn
 from torchvision.models import ResNet18_Weights
-
+from fed_priv_models.cnn_target import CNNTarget
 from common.config import Config
 from fed_priv_models.pad_operators import Reshape3Bands, PadBeforeLast, PadLastDimCircular, Squeeze
 from fed_priv_models.resnet_cifar import resnet20
@@ -16,7 +16,8 @@ def init_model():
         # A simple linear 2-layer Toy model
         model = toy_model()
     elif Config.CIFAR10_DATA:
-        model = simple_mlp_cls()
+        model = CNNTarget(in_channels=3, n_kernels=16, embedding_dim=10)
+        # model = simple_mlp_cls()
         # model = resnet20()
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
