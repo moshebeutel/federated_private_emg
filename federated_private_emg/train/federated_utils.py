@@ -201,6 +201,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
     best_epoch_validation_acc = 0.0
     acc_decrease_count = 0
+    if Config.USE_GP:
+        loss_increase_count = 0
+        best_epoch_validation_loss = 100000.0
     best_model = init_model()
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
@@ -252,14 +255,26 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         output_fn([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
-        if val_acc > best_epoch_validation_acc:
-            best_epoch_validation_acc = val_acc
-            acc_decrease_count = 0
-            for bp, p in zip(best_model.parameters(), model.parameters()):
-                bp.data = p.data
+        if Config.USE_GP:
+            if val_loss < best_epoch_validation_loss:
+                best_epoch_validation_loss = val_loss
+                loss_increase_count = 0
+                for bp, p in zip(best_model.parameters(), model.parameters()):
+                    bp.data = p.data
+                logging.info(f'new best loss {best_epoch_validation_loss}')
+            else:
+                loss_increase_count += 1
+                logging.warning(f'loss_increase_count {loss_increase_count}')
         else:
-            acc_decrease_count += 1
-            logging.warning(f'acc_decrease_count {acc_decrease_count}')
+            if val_acc > best_epoch_validation_acc:
+                best_epoch_validation_acc = val_acc
+                acc_decrease_count = 0
+                for bp, p in zip(best_model.parameters(), model.parameters()):
+                    bp.data = p.data
+                logging.info(f'new best acc {best_epoch_validation_acc}')
+            else:
+                acc_decrease_count += 1
+                logging.warning(f'acc_decrease_count {acc_decrease_count}')
 
         if log2wandb:
             wandb.log({
@@ -272,9 +287,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 'best_epoch_validation_acc': best_epoch_validation_acc
             })
 
-        if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
-            logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')
-            output_fn(accountant_params_string())
+        if (not Config.USE_GP and acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT) or\
+                (Config.USE_GP and loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT):
+            logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.' if not Config.USE_GP else
+                            f'Loss increases for {loss_increase_count} rounds. Quit.')
+            if Config.USE_GEP:
+                output_fn(accountant_params_string())
             break
 
     # Test Eval
