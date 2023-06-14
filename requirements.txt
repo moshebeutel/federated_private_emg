@@ -1,9 +1,9 @@
 numpy
-torch==1.13.1
+torch
 pandas
-pytables==3.7.0
+# pytable
 wandb
-setuptools
+setuptools==61.0
 tqdm
 torchvision
 scikit-learn
