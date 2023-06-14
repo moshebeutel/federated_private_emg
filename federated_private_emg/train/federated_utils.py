@@ -12,7 +12,7 @@ from common.utils import init_data_loaders, labels_to_consecutive, \
 from differential_privacy.accountant_utils import accountant_params_string
 from fed_priv_models.model_factory import init_model
 from fed_priv_models.gep import GEP
-from fed_priv_models.pFedGP.utils import build_tree
+from fed_priv_models.pFedGP.utils import build_tree, eval_model
 from train.params import TrainParams
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
 
@@ -217,6 +217,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                          gep=gep, GPs=GPs, output_fn=lambda s: None)  # output_fn)
 
         model.eval()
+        # if Config.USE_GP:
+        #     val_results, labels_vs_preds_val = eval_model(net = model, GPs = GPs, clients, split="val")
+        #     val_avg_loss, val_avg_acc = calc_metrics(val_results)
         val_losses, val_accs = [], {}
         for i, u in enumerate(validation_user_list):
             validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import torch
 import numpy as np
 import random
@@ -11,6 +13,57 @@ import sys
 import warnings
 
 from common.config import Config
+
+
+@torch.no_grad()
+def eval_model(global_model, GPs, clients, split):
+    results = defaultdict(lambda: defaultdict(list))
+    targets = []
+    preds = []
+
+    global_model.eval()
+
+    for client_id in range(clients.n_clients):
+        is_first_iter = True
+        running_loss, running_correct, running_samples = 0., 0., 0.
+        if split == 'test':
+            curr_data = clients.test_loaders[client_id]
+        elif split == 'val':
+            curr_data = clients.val_loaders[client_id]
+        else:
+            curr_data = clients.train_loaders[client_id]
+
+        GPs[client_id], label_map, X_train, Y_train = build_tree(clients, client_id)
+        GPs[client_id].eval()
+
+        for batch_count, batch in enumerate(curr_data):
+            img, label = tuple(t.to(Config.DEVICE) for t in batch)
+            Y_test = torch.tensor([label_map[l.item()] for l in label], dtype=label.dtype,
+                                  device=label.device)
+
+            X_test = global_model(img)
+            loss, pred = GPs[client_id].forward_eval(X_train, Y_train, X_test, Y_test, is_first_iter)
+
+            running_loss += loss.item()
+            running_correct += pred.argmax(1).eq(Y_test).sum().item()
+            running_samples += len(Y_test)
+
+            is_first_iter = False
+            targets.append(Y_test)
+            preds.append(pred)
+
+        # erase tree (no need to save it)
+        GPs[client_id].tree = None
+
+        results[client_id]['loss'] = running_loss / (batch_count + 1)
+        results[client_id]['correct'] = running_correct
+        results[client_id]['total'] = running_samples
+
+    target = detach_to_numpy(torch.cat(targets, dim=0))
+    full_pred = detach_to_numpy(torch.cat(preds, dim=0))
+    labels_vs_preds = np.concatenate((target.reshape(-1, 1), full_pred), axis=1)
+
+    return results, labels_vs_preds
 
 
 @torch.no_grad()

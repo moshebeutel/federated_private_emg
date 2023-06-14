@@ -26,6 +26,14 @@ from common.config import Config
 import matplotlib.pyplot as plt
 
 
+def calc_metrics(results):
+    total_correct = sum([val['correct'] for val in results.values()])
+    total_samples = sum([val['total'] for val in results.values()])
+    avg_loss = np.mean([val['loss'] for val in results.values()])
+    avg_acc = total_correct / total_samples
+    return avg_loss, avg_acc
+
+
 def sgd_dp_batch(model, batchsize):
     device = next(model.parameters()).device
     grad_norm_list = torch.zeros(batchsize).to(device)
