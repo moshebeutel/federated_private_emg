@@ -14,7 +14,7 @@ from fed_priv_models.model_factory import init_model
 from fed_priv_models.gep import GEP
 from fed_priv_models.pFedGP.utils import build_tree, eval_model
 from train.params import TrainParams
-from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
+from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch, calc_metrics
 
 
 def create_public_dataset(public_users: str or list[str]):
@@ -201,9 +201,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
     best_epoch_validation_acc = 0.0
     acc_decrease_count = 0
-    if Config.USE_GP:
-        loss_increase_count = 0
-        best_epoch_validation_loss = 100000.0
     best_model = init_model()
 
     # epoch_pbar = tqdm(range(num_epochs), desc='Epoch Loop')
@@ -217,83 +214,91 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                          gep=gep, GPs=GPs, output_fn=lambda s: None)  # output_fn)
 
         model.eval()
-        # if Config.USE_GP:
-        #     val_results, labels_vs_preds_val = eval_model(net = model, GPs = GPs, clients, split="val")
-        #     val_avg_loss, val_avg_acc = calc_metrics(val_results)
         val_losses, val_accs = [], {}
-        for i, u in enumerate(validation_user_list):
-            validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                                  datasize=Config.BATCH_SIZE * 4,
-                                                  datasets=['validation'],
-                                                  output_fn=lambda s: None)
-            loss, acc = run_single_epoch(loader=validation_loader, model=model, criterion=loss_fn,
-                                         train_params=eval_params)
+        if Config.USE_GP:
+            val_results, labels_vs_preds_val = eval_model(model=model, GPs=GPs, split="validation")
+            val_losses = [val['loss'] for val in val_results.values()]
+            val_accs_list = [val['correct'] / val['total'] for val in val_results.values()]
+            val_accs = {u: acc for (u, acc) in zip(val_results.keys(), val_accs_list)}
 
-            val_losses.append(float(loss))
-            val_accs[u] = float(acc)
+        else:
+
+            for i, u in enumerate(validation_user_list):
+                validation_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                                      datasize=Config.BATCH_SIZE * 4,
+                                                      datasets=['validation'],
+                                                      output_fn=lambda s: None)
+                loss, acc = run_single_epoch(loader=validation_loader, model=model, criterion=loss_fn,
+                                             train_params=eval_params)
+
+                val_losses.append(float(loss))
+                val_accs[u] = float(acc)
+                del loss, acc, validation_loader
 
         t_losses = torch.tensor(val_losses)
         t_accs = torch.tensor(list(val_accs.values()), dtype=torch.float)
         val_loss = t_losses.mean()
         val_acc = t_accs.mean()
         val_loss_std = t_losses.std()
-        val_acc_std = t_losses.std()
+        val_acc_std = t_accs.std()
 
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
 
-        loss_str = f'federated global epoch {epoch} train_loss {epoch_train_loss} val set loss {val_loss} std {val_loss_std}'
-        acc_str = f' train_acc {epoch_train_acc} val set acc {val_acc} std {val_acc_std}'
+        if not Config.USE_GP:
+            loss_str = f'federated global epoch {epoch} train_loss {epoch_train_loss} val set loss {val_loss} std {val_loss_std}'
+            acc_str = f' train_acc {epoch_train_acc} val set acc {val_acc} std {val_acc_std}'
+        else:
+            loss_str = f'federated global epoch {epoch} val set loss {val_loss} std {val_loss_std}'
+            acc_str = f' val set acc {val_acc} std {val_acc_std}'
 
         output_fn(loss_str if Config.TOY_STORY else loss_str + acc_str)
 
-        logging.debug(acc_per_cls_string(user_accuracies_dict=val_accs, user_list=validation_user_list))
+        # logging.debug(acc_per_cls_string(user_accuracies_dict=val_accs, user_list=validation_user_list))
 
         # Release memory
-        del loss, acc, validation_loader, t_accs, t_losses, val_losses, val_accs
+        del t_accs, t_losses, val_losses, val_accs
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
         output_fn([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
-        if Config.USE_GP:
-            if val_loss < best_epoch_validation_loss:
-                best_epoch_validation_loss = val_loss
-                loss_increase_count = 0
-                for bp, p in zip(best_model.parameters(), model.parameters()):
-                    bp.data = p.data
-                logging.info(f'new best loss {best_epoch_validation_loss}')
-            else:
-                loss_increase_count += 1
-                logging.warning(f'loss_increase_count {loss_increase_count}')
+        if val_acc > best_epoch_validation_acc:
+            best_epoch_validation_acc = val_acc
+            acc_decrease_count = 0
+            for bp, p in zip(best_model.parameters(), model.parameters()):
+                bp.data = p.data
+            logging.info(f'new best acc {best_epoch_validation_acc}')
         else:
-            if val_acc > best_epoch_validation_acc:
-                best_epoch_validation_acc = val_acc
-                acc_decrease_count = 0
-                for bp, p in zip(best_model.parameters(), model.parameters()):
-                    bp.data = p.data
-                logging.info(f'new best acc {best_epoch_validation_acc}')
-            else:
-                acc_decrease_count += 1
-                logging.warning(f'acc_decrease_count {acc_decrease_count}')
+            acc_decrease_count += 1
+            logging.warning(f'acc_decrease_count {acc_decrease_count}')
 
         if log2wandb:
-            wandb.log({
-                'epoch_train_loss': epoch_train_loss,
-                'epoch_train_acc': epoch_train_acc,
-                'epoch_validation_loss': val_loss,
-                'epoch_validation_acc': val_acc,
-                'epoch_validation_loss_std': val_loss_std,
-                'epoch_validation_acc_std': val_acc_std,
-                'best_epoch_validation_acc': best_epoch_validation_acc
-            })
+            log_dict = {'epoch_validation_loss': val_loss,
+                        'epoch_validation_acc': val_acc,
+                        'epoch_validation_loss_std': val_loss_std,
+                        'epoch_validation_acc_std': val_acc_std,
+                        'best_epoch_validation_acc': best_epoch_validation_acc
+                        }
 
-        if (not Config.USE_GP and acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT) or\
-                (Config.USE_GP and loss_increase_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT):
-            logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.' if not Config.USE_GP else
-                            f'Loss increases for {loss_increase_count} rounds. Quit.')
+            if not Config.USE_GP:
+                log_dict.update({'epoch_train_loss': epoch_train_loss,
+                                 'epoch_train_acc': epoch_train_acc})
+            wandb.log(log_dict)
+            # wandb.log({
+            #     'epoch_train_loss': epoch_train_loss,
+            #     'epoch_train_acc': epoch_train_acc,
+            #     'epoch_validation_loss': val_loss,
+            #     'epoch_validation_acc': val_acc,
+            #     'epoch_validation_loss_std': val_loss_std,
+            #     'epoch_validation_acc_std': val_acc_std,
+            #     'best_epoch_validation_acc': best_epoch_validation_acc
+            # })
+
+        if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
+            logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')
             if Config.USE_GEP:
                 output_fn(accountant_params_string())
             break

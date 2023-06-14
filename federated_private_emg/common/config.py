@@ -40,7 +40,7 @@ class Config:
     WRITE_TO_WANDB = False
 
     # GP
-    USE_GP = True
+    USE_GP =False
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'

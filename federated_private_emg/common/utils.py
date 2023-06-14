@@ -39,10 +39,11 @@ DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float
 if Config.TOY_STORY or Config.CIFAR10_DATA:
     train_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
     public_users = [('%d' % i).zfill(4) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
-    # if not Config.USE_GEP:
-    #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
-    #     public_users = []
-    #     Config.NUM_CLIENTS_PUBLIC = 0
+    if not Config.USE_GEP:
+        Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+        train_user_list = public_users + train_user_list
+        public_users = []
+        Config.NUM_CLIENTS_PUBLIC = 0
     validation_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
                                                                Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1)]
     test_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
@@ -54,7 +55,7 @@ else:
     validation_user_list = ['22', '23']
     test_user_list = ['07', '12']
 
-all_users_list = public_users + train_user_list + validation_user_list + test_user_list
+all_users_list = list(set(public_users + train_user_list + validation_user_list + test_user_list))
 USERS_BIASES = {user: bias for (user, bias) in
                 zip(all_users_list, (Config.USER_BIAS_SCALE * torch.randn(size=(len(all_users_list),))).tolist())}
 USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
