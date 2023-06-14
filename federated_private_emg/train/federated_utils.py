@@ -308,16 +308,25 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         best_model.eval()
         test_loss, test_acc = 0, 0
         test_accuracies = {}
-        for u in test_user_list:
-            test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
-                                            datasize=Config.BATCH_SIZE * 4,
-                                            datasets=['test'],
-                                            output_fn=lambda s: None)
-            loss, acc = run_single_epoch(model=best_model, loader=test_loader, criterion=loss_fn,
-                                         train_params=eval_params)
-            test_loss += loss / len(test_user_list)
-            test_acc += acc / len(test_user_list)
-            test_accuracies[u] = acc
+
+        if Config.USE_GP:
+            test_results, labels_vs_preds_test = eval_model(model=best_model, GPs=GPs, split="test")
+            test_loss = torch.mean(torch.tensor([test['loss'] for test in test_results.values()]))
+            test_accs_list = [test['correct'] / test['total'] for test in test_results.values()]
+            test_accuracies = {u: acc for (u, acc) in zip(test_results.keys(), test_accs_list)}
+            test_acc = torch.mean(torch.tensor(test_accs_list))
+
+        else:
+            for u in test_user_list:
+                test_loader = init_data_loaders(datasets_folder_name=os.path.join(Config.WINDOWED_DATA_DIR, u),
+                                                datasize=Config.BATCH_SIZE * 4,
+                                                datasets=['test'],
+                                                output_fn=lambda s: None)
+                loss, acc = run_single_epoch(model=best_model, loader=test_loader, criterion=loss_fn,
+                                             train_params=eval_params)
+                test_loss += loss / len(test_user_list)
+                test_acc += acc / len(test_user_list)
+                test_accuracies[u] = acc
 
         output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
         output_fn(accountant_params_string())

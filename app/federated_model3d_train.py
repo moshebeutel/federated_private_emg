@@ -99,7 +99,8 @@ def single_train(exp_name):
 
     if Config.USE_GP:
         GPs = {}
-        for u in train_user_list:
+        users_list = public_users + train_user_list if Config.USE_GEP else train_user_list
+        for u in users_list:
             GPs[u] = pFedGPFullLearner(n_output=Config.CIFAR10_CLASSES_PER_USER)
 
     if Config.CIFAR10_DATA:
@@ -156,7 +157,7 @@ def single_train(exp_name):
                           output_fn=logger.info)
 
 
-def update_accountant_params(output_fn):
+def update_accountant_params(output_fn=lambda s: None):
     sampling_prob = Config.NUM_CLIENT_AGG / (Config.NUM_CLIENTS_TRAIN - Config.NUM_CLIENTS_PUBLIC)
     steps = Config.NUM_EPOCHS  # int(Config.NUM_EPOCHS / sampling_prob)
     output_fn(f'steps {steps}')
@@ -199,6 +200,8 @@ def sweep_train(config=None):
         Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
         Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
         Config.GEP_USE_RESIDUAL = (Config.USE_GEP and config.dp == 'GEP_RESIDUALS')
+        if not Config.USE_GEP:
+            Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
 
         if Config.USE_GEP:
             Config.GEP_CLIP0 = config.clip
@@ -209,8 +212,6 @@ def sweep_train(config=None):
         # Config.GEP_SIGMA1 = config.sigma
 
         Config.DP_EPSILON = config.epsilon
-        Config.NUM_CLIENT_AGG = 50 - Config.NUM_CLIENTS_PUBLIC
-        Config.SAMPLE_CLIENTS_WITH_REPLACEMENT = (config.sample_with_replacement == 1)
 
         # sigma0 = '%.3f' % Config.GEP_SIGMA0
         # sigma1 = '%.3f' % Config.GEP_SIGMA1
@@ -262,9 +263,9 @@ def run_sweep():
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
         },
-        'sample_with_replacement': {
-            'values': [0, 1]
-        },
+        # 'sample_with_replacement': {
+        #     'values': [0, 1]
+        # },
         # 'agg': {
         #     'values': [50]
         # },
@@ -275,7 +276,7 @@ def run_sweep():
         #     'values': [3]
         # },
         'internal_epochs': {
-            'values': [1, 3, 5]
+            'values': [1, 5]
         }
 
     })
@@ -286,5 +287,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    main()
-    # run_sweep()
+    # main()
+    run_sweep()

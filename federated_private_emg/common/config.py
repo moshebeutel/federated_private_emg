@@ -37,10 +37,10 @@ class Config:
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10'])
     DATASET = DATASET_TYPE.CIFAR10
 
-    WRITE_TO_WANDB = False
+    WRITE_TO_WANDB = True
 
     # GP
-    USE_GP =False
+    USE_GP = True
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
@@ -60,11 +60,11 @@ class Config:
 
     # DP
     DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['NO_DP', 'SGD_DP', 'GEP'])
-    DP_METHOD = DP_METHOD_TYPE.NO_DP
+    DP_METHOD = DP_METHOD_TYPE.GEP
     USE_GEP = (DP_METHOD == DP_METHOD_TYPE.GEP)
     PUBLIC_USERS_CONTRIBUTE_TO_LEARNING = True
     USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE.SGD_DP)
-    ADD_DP_NOISE = True
+    ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
     LOT_SIZE_IN_BATCHES = 5
     DP_EPSILON = 1.0
     DP_DELTA = 1e-5
@@ -98,7 +98,7 @@ class Config:
 
     # DP_SGD
     DP_C = 0.01  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
-    DP_SIGMA = 0.0  # sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
+    DP_SIGMA = sqrt(2 * log(1.25 / DP_DELTA))/DP_EPSILON   # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # CIFAR10
     CIFAR10_DATA = (DATASET == DATASET_TYPE.CIFAR10)
