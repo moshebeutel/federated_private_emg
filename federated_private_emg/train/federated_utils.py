@@ -328,8 +328,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 test_acc += acc / len(test_user_list)
                 test_accuracies[u] = acc
 
-        output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
-        output_fn(accountant_params_string())
+        # output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
+        if Config.USE_GEP:
+            output_fn(accountant_params_string())
         output_fn(f'Test Finished. Test Loss {test_loss} Test Acc {test_acc}')
     output_fn(f'Federated Train Finished')
 
