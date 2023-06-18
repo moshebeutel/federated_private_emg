@@ -216,7 +216,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         model.eval()
         val_losses, val_accs = [], {}
         if Config.USE_GP:
-            val_results, labels_vs_preds_val = eval_model(model=model, GPs=GPs, split="validation")
+            val_results, labels_vs_preds_val = eval_model(model=model, GPs=GPs, split="validation",
+                                                          users=utils.validation_user_list)
             val_losses = [val['loss'] for val in val_results.values()]
             val_accs_list = [val['correct'] / val['total'] for val in val_results.values()]
             val_accs = {u: acc for (u, acc) in zip(val_results.keys(), val_accs_list)}
@@ -310,7 +311,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         test_accuracies = {}
 
         if Config.USE_GP:
-            test_results, labels_vs_preds_test = eval_model(model=best_model, GPs=GPs, split="test")
+            test_results, labels_vs_preds_test = eval_model(model=best_model, GPs=GPs, split="test",
+                                                            users=utils.test_user_list)
             test_loss = torch.mean(torch.tensor([test['loss'] for test in test_results.values()]))
             test_accs_list = [test['correct'] / test['total'] for test in test_results.values()]
             test_accuracies = {u: acc for (u, acc) in zip(test_results.keys(), test_accs_list)}

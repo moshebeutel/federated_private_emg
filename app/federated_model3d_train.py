@@ -99,8 +99,7 @@ def single_train(exp_name):
 
     if Config.USE_GP:
         GPs = {}
-        users_list = public_users + train_user_list if Config.USE_GEP else train_user_list
-        for u in users_list:
+        for u in utils.all_users_list:
             GPs[u] = pFedGPFullLearner(n_output=Config.CIFAR10_CLASSES_PER_USER)
 
     if Config.CIFAR10_DATA:
@@ -270,7 +269,7 @@ def run_sweep():
         #     'values': [50]
         # },
         'dp': {
-            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', ]
+            'values': ['GEP_NO_RESIDUALS', 'SGD_DP', 'GEP_RESIDUALS']
         },
         # 'classes_each_user': {
         #     'values': [3]

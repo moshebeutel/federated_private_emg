@@ -1,6 +1,5 @@
 from collections import defaultdict
 from common import utils
-from common.utils import train_user_list
 import torch
 import numpy as np
 import random
@@ -41,14 +40,14 @@ def build_tree(gp, net, loader):
     return gp, label_map, X, offset_labels
 
 @torch.no_grad()
-def eval_model(model, GPs, split):
+def eval_model(model, GPs, split, users):
     results = defaultdict(lambda: defaultdict(list))
     targets = []
     preds = []
 
     model.eval()
 
-    for i, u in enumerate(train_user_list):
+    for i, u in enumerate(users):
         is_first_iter = True
         running_loss, running_correct, running_samples = 0., 0., 0.
 
