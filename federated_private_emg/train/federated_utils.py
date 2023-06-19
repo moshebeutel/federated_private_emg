@@ -219,7 +219,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             val_results, labels_vs_preds_val = eval_model(model=model, GPs=GPs, split="validation",
                                                           users=utils.validation_user_list)
             val_losses = [val['loss'] for val in val_results.values()]
-            val_accs_list = [val['correct'] / val['total'] for val in val_results.values()]
+            val_accs_list = [100.0*val['correct'] / val['total'] for val in val_results.values()]
             val_accs = {u: acc for (u, acc) in zip(val_results.keys(), val_accs_list)}
 
         else:
