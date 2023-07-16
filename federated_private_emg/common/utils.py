@@ -17,8 +17,8 @@ import pandas as pd
 import torch
 from common.config import Config
 
-if Config.CIFAR10_DATA:
-    from torchvision.datasets import CIFAR10
+if Config.CIFAR_DATA:
+    from torchvision.datasets import CIFAR10, CIFAR100
     from torchvision.transforms import transforms
 
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
@@ -36,7 +36,7 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
-if Config.TOY_STORY or Config.CIFAR10_DATA:
+if Config.TOY_STORY or Config.CIFAR_DATA:
     train_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
     public_users = [('%d' % i).zfill(4) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
     if not Config.USE_GEP:
@@ -61,18 +61,26 @@ USERS_BIASES = {user: bias for (user, bias) in
 USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
                                                               (Config.DATA_NOISE_SCALE * torch.rand(
                                                                   size=(len(all_users_list),))).tolist())}
-if Config.CIFAR10_DATA:
-    normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+if Config.CIFAR_DATA:
+    if Config.CIFAR10_DATA:
+        normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        dataset_ctor = CIFAR10
+        dataset_dir = Config.CIFAR10_DATASET_DIR
+    else:
+        normalization = transforms.Normalize((0.5071, 0.4865, 0.4409), (0.2673, 0.2564, 0.2762))
+        dataset_ctor = CIFAR100
+        dataset_dir = Config.CIFAR100_DATASET_DIR
+
     transform = transforms.Compose([transforms.ToTensor(), normalization])
-    dataset = CIFAR10(
-        root=Config.CIFAR10_DATASET_DIR,
+    dataset = dataset_ctor(
+        root=dataset_dir,
         train=True,
         download=True,
         transform=transform
     )
 
-    test_set = CIFAR10(
-        root=Config.CIFAR10_DATASET_DIR,
+    test_set = dataset_ctor(
+        root=dataset_dir,
         train=False,
         download=True,
         transform=transform
@@ -81,19 +89,21 @@ if Config.CIFAR10_DATA:
     val_size = len(test_set)  # 10000
     train_size = len(dataset) - val_size
     train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
-    CIFAR10_TRAIN_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=True)
-    CIFAR10_VALIDATION_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=False)
-    CIFAR10_TEST_LOADER = torch.utils.data.DataLoader(test_set, batch_size=Config.BATCH_SIZE, shuffle=False)
-    CIFAR10_LOADERS = {'train': CIFAR10_TRAIN_LOADER, 'validation': CIFAR10_VALIDATION_LOADER,
-                       'test': CIFAR10_TEST_LOADER}
-    CIFAR10_USER_LOADERS = {}
-    CIFAR10_USER_CLS_PARTITIONS = {}
+    CIFAR_TRAIN_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=True)
+    CIFAR_VALIDATION_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=False)
+    CIFAR_TEST_LOADER = torch.utils.data.DataLoader(test_set, batch_size=Config.BATCH_SIZE, shuffle=False)
+    CIFAR_LOADERS = {'train': CIFAR_TRAIN_LOADER, 'validation': CIFAR_VALIDATION_LOADER,
+                       'test': CIFAR_TEST_LOADER}
+    CIFAR_USER_LOADERS = {}
+    CIFAR_USER_CLS_PARTITIONS = {}
+
+
     CIFAR10_CLASSES_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
     CLASSES_OF_PUBLIC_USERS = []
 
     def get_users_list_for_class(cls: int, from_users: list[str] = None) -> list[str]:
-        subset_of = CIFAR10_USER_CLS_PARTITIONS.keys() if from_users is None else from_users
-        l_cls = [u for u in subset_of if cls in CIFAR10_USER_CLS_PARTITIONS[u][0]]
+        subset_of = CIFAR_USER_CLS_PARTITIONS.keys() if from_users is None else from_users
+        l_cls = [u for u in subset_of if cls in CIFAR_USER_CLS_PARTITIONS[u][0]]
         return l_cls
 
 
@@ -262,8 +272,8 @@ def create_cifar_data(datasize, dataset: str):
     assert dataset in ['train', 'validation', 'test'], 'dataset arguemt should be one of [train, validation, test]'
 
     num_batches = int(datasize / Config.BATCH_SIZE)
-    assert dataset in CIFAR10_LOADERS, 'No cifar loader for ' + dataset
-    loader = CIFAR10_LOADERS[dataset]
+    assert dataset in CIFAR_LOADERS, 'No cifar loader for ' + dataset
+    loader = CIFAR_LOADERS[dataset]
     X_list, y_list = [], []
     for _ in range(num_batches):
         X, y = next(iter(loader))
@@ -336,13 +346,13 @@ def init_data_loaders(datasets_folder_name,
     loaders = []
     assert datasets, 'Given empty datasets list'
     for dataset in datasets:
-        if Config.CIFAR10_DATA:
+        if Config.CIFAR_DATA:
             u = datasets_folder_name[-4:]
-            loader = CIFAR10_USER_LOADERS[u][dataset]
+            loader = CIFAR_USER_LOADERS[u][dataset]
         else:
             X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt',
                                  datasize=datasize)
-            if not Config.TOY_STORY and not Config.CIFAR10_DATA:
+            if not Config.TOY_STORY and not Config.CIFAR_DATA:
                 assert_loaded_datasets(X, y)
             output_fn(f'Loaded {dataset} X shape {X.shape}  y shape {y.shape}')
             loader = torch.utils.data.DataLoader(

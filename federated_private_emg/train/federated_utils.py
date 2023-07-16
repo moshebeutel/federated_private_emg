@@ -72,7 +72,7 @@ def create_public_dataset(public_users: str or list[str]):
         del public_inputs_list, public_targets_list
         gc.collect()
 
-        public_targets = public_targets if Config.CIFAR10_DATA \
+        public_targets = public_targets if Config.CIFAR_DATA \
             else labels_to_consecutive(public_targets).squeeze().long()
         # print('public data shape', public_inputs.shape, public_targets.shape)
         # print(public_inputs.shape, public_targets.shape)
@@ -264,7 +264,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        output_fn([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
+        # output_fn([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
         if val_acc > best_epoch_validation_acc:
             best_epoch_validation_acc = val_acc

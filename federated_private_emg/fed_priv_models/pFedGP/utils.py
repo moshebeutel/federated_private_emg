@@ -51,8 +51,8 @@ def eval_model(model, GPs, split, users):
         is_first_iter = True
         running_loss, running_correct, running_samples = 0., 0., 0.
 
-        loader = utils.CIFAR10_USER_LOADERS[u][split]
-        train_loader = utils.CIFAR10_USER_LOADERS[u]['train']
+        loader = utils.CIFAR_USER_LOADERS[u][split]
+        train_loader = utils.CIFAR_USER_LOADERS[u]['train']
         gp = GPs[u]
 
         gp, label_map, X_train, Y_train = build_tree(gp=gp, net=model, loader=train_loader)

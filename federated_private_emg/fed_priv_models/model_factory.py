@@ -15,8 +15,8 @@ def init_model():
     if Config.TOY_STORY:
         # A simple linear 2-layer Toy model
         model = toy_model()
-    elif Config.CIFAR10_DATA:
-        model = CNNTarget(in_channels=3, n_kernels=16, embedding_dim=10)
+    elif Config.CIFAR_DATA:
+        model = CNNTarget(in_channels=3, n_kernels=16, embedding_dim=10 if Config.CIFAR10_DATA else 100)
         # model = simple_mlp_cls()
         # model = resnet20()
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)

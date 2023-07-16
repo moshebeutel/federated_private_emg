@@ -100,25 +100,25 @@ def single_train(exp_name):
     if Config.USE_GP:
         GPs = {}
         for u in utils.all_users_list:
-            GPs[u] = pFedGPFullLearner(n_output=Config.CIFAR10_CLASSES_PER_USER)
+            GPs[u] = pFedGPFullLearner(n_output=Config.CLASSES_PER_USER)
 
-    if Config.CIFAR10_DATA:
+    if Config.CIFAR_DATA:
         loaders, cls_partitions = gen_random_loaders(num_users=len(utils.all_users_list), bz=Config.BATCH_SIZE,
-                                                     classes_per_user=Config.CIFAR10_CLASSES_PER_USER)
-        utils.CIFAR10_USER_LOADERS = \
+                                                     classes_per_user=Config.CLASSES_PER_USER)
+        utils.CIFAR_USER_LOADERS = \
             {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
              for user, train_loader, validation_loader, test_loader in
              zip(utils.all_users_list, loaders[0], loaders[1], loaders[2])}
 
-        utils.CIFAR10_USER_CLS_PARTITIONS = \
+        utils.CIFAR_USER_CLS_PARTITIONS = \
             {user: (cls, prb) for (user, cls, prb) in
              zip(utils.all_users_list, cls_partitions['class'], cls_partitions['prob'])}
 
         print('Public Class Partitions')
-        utils.CLASSES_OF_PUBLIC_USERS = [utils.CIFAR10_USER_CLS_PARTITIONS[u][0][0] for u in public_users]
+        utils.CLASSES_OF_PUBLIC_USERS = [utils.CIFAR_USER_CLS_PARTITIONS[u][0][0] for u in public_users]
         print(utils.CLASSES_OF_PUBLIC_USERS)
         for u in public_users:
-            print(u, ':', utils.CIFAR10_USER_CLS_PARTITIONS[u])
+            print(u, ':', utils.CIFAR_USER_CLS_PARTITIONS[u])
 
     gep = None
     if Config.USE_GEP:
@@ -189,16 +189,43 @@ def sweep_train(config=None):
     print(exp_name)
 
     with wandb.init(config=config):
+
         # config = {**{'_NAME': exp_name}, **wandb.config}
         config = wandb.config
         config['clip'] = 0.01
         print(config)
-        Config.EPOCHS = 50
+        if config.dp == 'NO_DP' and config.epsilon != 8.0:
+            return
+        Config.USE_GP = (config.use_gp == 1)
 
-        Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP if config.dp == 'SGD_DP' else Config.DP_METHOD_TYPE.GEP
-        Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
-        Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
-        Config.GEP_USE_RESIDUAL = (Config.USE_GEP and config.dp == 'GEP_RESIDUALS')
+        if config.dp == 'SGD_DP':
+            Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
+            Config.USE_GEP = False
+            Config.USE_SGD_DP = True
+            Config.GEP_USE_RESIDUAL = False
+        elif config.dp == 'NO_DP':
+            Config.DP_METHOD = Config.DP_METHOD_TYPE.NO_DP
+            Config.USE_GEP = False
+            Config.USE_SGD_DP = False
+            Config.GEP_USE_RESIDUAL = False
+        elif config.dp == 'GEP_RESIDUALS':
+            Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
+            Config.USE_GEP = True
+            Config.USE_SGD_DP = False
+            Config.GEP_USE_RESIDUAL = True
+        elif config.dp == 'GEP_NO_RESIDUALS':
+            Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
+            Config.USE_GEP = True
+            Config.USE_SGD_DP = False
+            Config.GEP_USE_RESIDUAL = False
+
+        # Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
+        # Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
+        # Config.GEP_USE_RESIDUAL = (Config.USE_GEP and config.dp == 'GEP_RESIDUALS')
+        # Config.GEP_NUM_BASES = config.gep_num_bases
+        # Config.GEP_NUM_GROUPS = config.gep_num_groups
+        # Config.GEP_POWER_ITER = config.gep_power_iter
+
         if not Config.USE_GEP:
             Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
 
@@ -210,7 +237,8 @@ def sweep_train(config=None):
         # Config.GEP_SIGMA0 = config.sigma
         # Config.GEP_SIGMA1 = config.sigma
 
-        Config.DP_EPSILON = config.epsilon
+        if Config.DP_METHOD != Config.DP_METHOD_TYPE.NO_DP:
+            Config.DP_EPSILON = config.epsilon
 
         # sigma0 = '%.3f' % Config.GEP_SIGMA0
         # sigma1 = '%.3f' % Config.GEP_SIGMA1
@@ -259,6 +287,9 @@ def run_sweep():
         # 'sigma': {
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
+        'num_run': {
+            'values': [1, 2, 3, 4, 5]
+        },
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
         },
@@ -269,15 +300,29 @@ def run_sweep():
         #     'values': [50]
         # },
         'dp': {
-            'values': ['GEP_NO_RESIDUALS', 'SGD_DP', 'GEP_RESIDUALS']
+            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
+            'values': ['SGD_DP']
         },
         # 'classes_each_user': {
         #     'values': [3]
         # },
-        'internal_epochs': {
-            'values': [1, 5]
-        }
+        # 'internal_epochs': {
+        #     'values': [1, 5]
+        # },
+        'use_gp': {
+            'values': [0, 1]
+        },
 
+        # 'gep_num_bases': {
+        #     'values': [50, 100]
+        # },
+
+        # 'gep_num_groups': {
+        #     'values': [10, 100]
+        # },
+        # 'gep_power_iter': {
+        #     'values': [3, 6]
+        # }
     })
 
     sweep_id = wandb.sweep(sweep_config, project="pytorch-sweeps-demo")

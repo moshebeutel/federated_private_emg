@@ -122,7 +122,7 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
             batch = (t.to(device) for t in batch)
             emg, labels = batch
 
-            labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).long().squeeze()
+            labels = labels if Config.TOY_STORY or Config.CIFAR_DATA else labels_to_consecutive(labels).long().squeeze()
 
             optimizer.zero_grad()
             outputs = model(emg.float())
@@ -393,7 +393,7 @@ def run_single_epoch(model, loader, criterion,
         batch = (t.to(device) for t in batch)
         inputs, labels = batch
 
-        labels = labels if Config.TOY_STORY or Config.CIFAR10_DATA else labels_to_consecutive(labels).squeeze()
+        labels = labels if Config.TOY_STORY or Config.CIFAR_DATA else labels_to_consecutive(labels).squeeze()
 
         grad_step_now = descent_every == 1 or descent_every > 1 and ((k + 1) % descent_every) == 0
 
