@@ -203,21 +203,26 @@ def sweep_train(config=None):
             Config.USE_GEP = False
             Config.USE_SGD_DP = True
             Config.GEP_USE_RESIDUAL = False
+            Config.ADD_DP_NOISE = True
         elif config.dp == 'NO_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.NO_DP
             Config.USE_GEP = False
             Config.USE_SGD_DP = False
             Config.GEP_USE_RESIDUAL = False
+            Config.ADD_DP_NOISE = False
         elif config.dp == 'GEP_RESIDUALS':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
             Config.USE_GEP = True
             Config.USE_SGD_DP = False
             Config.GEP_USE_RESIDUAL = True
+            Config.ADD_DP_NOISE = True
         elif config.dp == 'GEP_NO_RESIDUALS':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
             Config.USE_GEP = True
             Config.USE_SGD_DP = False
             Config.GEP_USE_RESIDUAL = False
+            Config.ADD_DP_NOISE = True
+
 
         # Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
         # Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
@@ -288,7 +293,7 @@ def run_sweep():
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
         'num_run': {
-            'values': [1, 2, 3, 4, 5]
+            'values': [1, 2, 3]
         },
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
@@ -301,6 +306,7 @@ def run_sweep():
         # },
         'dp': {
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
+            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
             'values': ['SGD_DP']
         },
         # 'classes_each_user': {
@@ -314,11 +320,11 @@ def run_sweep():
         },
 
         # 'gep_num_bases': {
-        #     'values': [50, 100]
+        #     'values': [10]
         # },
-
+        #
         # 'gep_num_groups': {
-        #     'values': [10, 100]
+        #     'values': [15, 20]
         # },
         # 'gep_power_iter': {
         #     'values': [3, 6]
