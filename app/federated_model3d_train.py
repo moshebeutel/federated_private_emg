@@ -8,7 +8,6 @@ from common.config import Config
 from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
     test_user_list, gen_random_loaders
 from differential_privacy.accountant_utils import get_sigma, accountant_params_string
-from differential_privacy.params import DpParams
 from differential_privacy.utils import attach_gep
 from fed_priv_models.model_factory import init_model
 from fed_priv_models.pFedGP.Learner import pFedGPFullLearner
@@ -122,7 +121,6 @@ def single_train(exp_name):
 
     gep = None
     if Config.USE_GEP:
-        public_inputs, public_targets = None, None  # create_public_dataset(public_users=public_users)
 
         batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users)
 
@@ -132,11 +130,7 @@ def single_train(exp_name):
                                          batch_size=batch_size_for_gep,
                                          clip0=Config.GEP_CLIP0, clip1=Config.GEP_CLIP1,
                                          power_iter=Config.GEP_POWER_ITER, num_groups=Config.GEP_NUM_GROUPS,
-                                         public_inputs=public_inputs, public_targets=public_targets,
                                          public_users=public_users)
-
-    dp_params = DpParams(dp_lot=Config.LOT_SIZE_IN_BATCHES * Config.BATCH_SIZE, dp_sigma=Config.DP_SIGMA,
-                         dp_C=Config.DP_C)
 
     internal_train_params = TrainParams(epochs=Config.NUM_INTERNAL_EPOCHS,
                                         batch_size=Config.BATCH_SIZE,
@@ -169,10 +163,6 @@ def update_accountant_params(output_fn=lambda s: None):
                                Config.DP_DELTA, rgp=Config.USE_GEP and Config.GEP_USE_RESIDUAL)
 
     if Config.USE_GEP:
-        # sigma_, eps_ = get_sigma(sampling_prob, steps, Config.DP_EPSILON, Config.DP_DELTA, rgp=(not Config.GEP_USE_RESIDUAL))
-        # print(f'Epsilon {eps}, sigma {sigma} for use residual {Config.GEP_USE_RESIDUAL}')
-        # print(f'Epsilon {eps_}, sigma {sigma_} for use residual {not Config.GEP_USE_RESIDUAL}')
-
         Config.GEP_SIGMA0 = sigma
         Config.GEP_SIGMA1 = sigma
     else:
@@ -222,7 +212,6 @@ def sweep_train(config=None):
             Config.USE_SGD_DP = False
             Config.GEP_USE_RESIDUAL = False
             Config.ADD_DP_NOISE = True
-
 
         # Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
         # Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
