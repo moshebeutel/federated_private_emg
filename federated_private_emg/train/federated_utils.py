@@ -147,11 +147,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
         # pull gradients from user
         for p, lp in zip(model.parameters(), local_model.parameters()):
-            # p.grad.data += (lp.grad.data / num_clients_in_epoch)
             p.grad_batch[i] = lp.grad.data
-            del lp.grad
-            # print('p.grad', p.grad)
-            # print('p.grad_batch', p.grad_batch)
+            if i < len(gep.public_users) - 1:
+                p.grad.data += lp.grad.data.squeeze() / len(gep.public_users)
 
         if Config.USE_GEP and i == len(gep.public_users) - 1:
             gep.get_anchor_space(model, loss_func=loss_fn)
@@ -177,9 +175,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
     if Config.USE_GEP:
         assert Config.USE_SGD_DP is False, 'Use GEP or SGD_DP. Not both'
-        gep_batch(accumulated_grads=None, gep=gep, model=model, batchsize=num_clients_in_epoch)
+        gep_batch(accumulated_grads=None, gep=gep, model=model, batchsize=Config.NUM_CLIENT_AGG)
     elif Config.ADD_DP_NOISE:
-        sgd_dp_batch(model=model, batchsize=num_clients_in_epoch)
+        sgd_dp_batch(model=model, batchsize=Config.NUM_CLIENT_AGG)
 
     optimizer.step()
     return epoch_train_loss, epoch_train_acc, model
@@ -219,7 +217,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             val_results, labels_vs_preds_val = eval_model(model=model, GPs=GPs, split="validation",
                                                           users=utils.validation_user_list)
             val_losses = [val['loss'] for val in val_results.values()]
-            val_accs_list = [100.0*val['correct'] / val['total'] for val in val_results.values()]
+            val_accs_list = [100.0 * val['correct'] / val['total'] for val in val_results.values()]
             val_accs = {u: acc for (u, acc) in zip(val_results.keys(), val_accs_list)}
 
         else:

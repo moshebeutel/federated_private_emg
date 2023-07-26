@@ -122,7 +122,7 @@ def single_train(exp_name):
     gep = None
     if Config.USE_GEP:
 
-        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users)
+        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users) + Config.NUM_CLIENT_AGG
 
         model, loss_fn, gep = attach_gep(net=model,
                                          loss_fn=loss_fn,
@@ -326,5 +326,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()

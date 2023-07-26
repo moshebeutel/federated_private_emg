@@ -23,7 +23,7 @@ from train.params import TrainParams
 from train.train_objects import TrainObjects
 from collections.abc import Callable
 from common.config import Config
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 def calc_metrics(results):
@@ -38,17 +38,19 @@ def sgd_dp_batch(model, batchsize):
     device = next(model.parameters()).device
     grad_norm_list = torch.zeros(batchsize).to(device)
     for p in model.parameters():
-        flat_g = p.grad_batch.reshape(batchsize, -1)
+        grad_batch_private = p.grad_batch[Config.NUM_CLIENTS_PUBLIC:]
+        flat_g = grad_batch_private.reshape(batchsize, -1)
         current_norm_list = torch.norm(flat_g, dim=1)
         grad_norm_list += torch.square(current_norm_list)
     grad_norm_list = torch.sqrt(grad_norm_list) / Config.DP_C
     grad_norm_list = torch.clip(grad_norm_list, min=1)
 
     for p in model.parameters():
-        flat_g = p.grad_batch.reshape(batchsize, -1)
+        grad_batch_private = p.grad_batch[Config.NUM_CLIENTS_PUBLIC:]
+        flat_g = grad_batch_private.reshape(batchsize, -1)
         flat_g = torch.div(flat_g, grad_norm_list.reshape(-1, 1))
-        p.grad_batch = flat_g.reshape(batchsize, *p.shape)
-        p.grad = torch.mean(p.grad_batch, dim=0)
+        p.grad_batch[Config.NUM_CLIENTS_PUBLIC:] = flat_g.reshape(batchsize, *p.shape)
+        p.grad += (torch.mean(p.grad_batch, dim=0) * (Config.NUM_CLIENT_AGG / Config.NUM_CLIENTS_PUBLIC))
         del p.grad_batch
         # Add DP noise to gradients
         noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C, size=p.grad.size(), device=p.device) / batchsize
@@ -287,7 +289,8 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
     for p in model.parameters():
         if hasattr(p, 'grad_batch'):
             # print('p.grad_batch.shape', p.grad_batch.shape)
-            batch_grad_list.append(p.grad_batch.reshape(p.grad_batch.shape[0], -1))
+            grad_batch_private = p.grad_batch[len(gep.public_users):]
+            batch_grad_list.append(grad_batch_private.reshape(grad_batch_private.shape[0], -1))
             # del p.grad_batch
 
     # print('flatten_tensor(batch_grad_list).shape', flatten_tensor(batch_grad_list).shape)
@@ -304,16 +307,10 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
                                   size=residual_grad.shape,
                                   device=residual_grad.device) / batchsize
 
-        # print('theta_noise', torch.linalg.norm(theta_noise))
-        # print('grad_noise', torch.linalg.norm(grad_noise))
         clipped_theta += theta_noise
         residual_grad += grad_noise
         del theta_noise, grad_noise
-    # print('clipped_theta', clipped_theta, torch.linalg.norm(clipped_theta))
-    # print('residual_grad', residual_grad, torch.linalg.norm(residual_grad))
-    # print('target_grad', target_grad, torch.linalg.norm(target_grad))
-    # # print('gep.get_approx_grad(clipped_theta)', gep.get_approx_grad(clipped_theta))
-    # print('clean_grad', clean_grad, torch.linalg.norm(clean_grad))
+
     noisy_grad = gep.get_approx_grad(clipped_theta)
     if Config.GEP_USE_RESIDUAL:
         noisy_grad += residual_grad
@@ -324,11 +321,8 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         shape = p.grad.shape
         numel = p.grad.numel()
 
-        # The following are for internal benchmark. Otherwise,
-        # Internal train is pure sgd (No projection, No clip, No noise) -
-        # GEP is done on accumulated grads before publishing
-
-        p.grad.data = noisy_grad[offset:offset + numel].view(shape)
+        p.grad.data += (noisy_grad[offset:offset + numel].view(shape)
+                        * (Config.NUM_CLIENT_AGG / Config.NUM_CLIENTS_PUBLIC))
         # p.grad.data *= batchsize
         # p.grad.data *= Config.BATCH_SIZE
         # p.grad.data = Config.BATCH_SIZE * clean_grad[offset:offset + numel].view(shape)

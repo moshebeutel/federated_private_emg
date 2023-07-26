@@ -37,7 +37,7 @@ class Config:
     WRITE_TO_WANDB = True
 
     # GP
-    USE_GP = True
+    USE_GP = False
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
@@ -68,7 +68,7 @@ class Config:
     ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 4, 46, 400
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 10, 50, 500
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -84,7 +84,7 @@ class Config:
 
     # DATASET
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10', 'CIFAR100'])
-    DATASET = DATASET_TYPE.CIFAR100
+    DATASET = DATASET_TYPE.CIFAR10
 
     # CIFAR10
     CIFAR10_DATA = (DATASET == DATASET_TYPE.CIFAR10)
