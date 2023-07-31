@@ -66,7 +66,7 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_p = pub_grad.shape[1]
 
     num_bases = min(num_bases, num_p)
-    print(pub_grad.shape[1], num_bases)
+    # print(pub_grad.shape[1], num_bases)
     L = torch.normal(0, 1.0, size=(pub_grad.shape[1], num_bases), device=pub_grad.device)
     for i in range(power_iter):
         # print('get bases: iter', i)
@@ -75,7 +75,6 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
         # print(R,L)
         orthogonalize(L)
     error_rate = check_approx_error(L, pub_grad)
-
     return L, num_bases, error_rate
 
 
@@ -142,7 +141,7 @@ class GEP(nn.Module):
 
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
-        print('get_anchor_space')
+        # print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
         # if self.selected_bases_list \
         # else torch.ones((self.batch_size, self.num_params))
