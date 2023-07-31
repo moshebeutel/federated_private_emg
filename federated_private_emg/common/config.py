@@ -16,7 +16,7 @@ class Config:
     DEVICE = 'cpu'
     BATCH_SIZE = 512
     NUM_EPOCHS = 100
-    DETERMINISTIC_SEED = False
+    DETERMINISTIC_SEED = True
     SEED = 42 if DETERMINISTIC_SEED else int(datetime.now().timestamp())
 
     EARLY_STOP_INCREASING_LOSS_COUNT = 10
@@ -37,7 +37,7 @@ class Config:
     WRITE_TO_WANDB = True
 
     # GP
-    USE_GP = False
+    USE_GP = True
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
@@ -57,10 +57,10 @@ class Config:
 
     # DP
     DP_METHOD_TYPE = Enum('DP_METHOD_TYPE', ['NO_DP', 'SGD_DP', 'GEP'])
-    DP_METHOD = DP_METHOD_TYPE.GEP
+    DP_METHOD = DP_METHOD_TYPE.NO_DP
     PUBLIC_USERS_CONTRIBUTE_TO_LEARNING = True
     LOT_SIZE_IN_BATCHES = 5
-    DP_EPSILON = 8.0
+    DP_EPSILON = 8
     DP_DELTA = 1e-5
     #  The following evaluate from DP_METHOD_TYPE
     USE_GEP = (DP_METHOD == DP_METHOD_TYPE.GEP)
@@ -72,8 +72,8 @@ class Config:
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
-    if not USE_GEP:
-        NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
+    # if not USE_GEP:
+    #     NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
 
     NUM_CLIENTS_VAL = 50
     NUM_CLIENTS_TEST = 50
@@ -106,8 +106,9 @@ class Config:
     GEP_SIGMA0 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_SIGMA1 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_POWER_ITER = 1
-    GEP_NUM_GROUPS = 50
+    GEP_NUM_GROUPS = 3
     GEP_USE_RESIDUAL = True
+    GEP_HISTORY_GRADS = 0
 
     # DP_SGD
     DP_C = 0.01  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))

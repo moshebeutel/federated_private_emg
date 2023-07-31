@@ -23,6 +23,8 @@ from train.params import TrainParams
 from train.train_objects import TrainObjects
 from collections.abc import Callable
 from common.config import Config
+
+
 # import matplotlib.pyplot as plt
 
 
@@ -46,15 +48,36 @@ def sgd_dp_batch(model, batchsize):
     grad_norm_list = torch.clip(grad_norm_list, min=1)
 
     for p in model.parameters():
+        # Take grads of private users
         grad_batch_private = p.grad_batch[Config.NUM_CLIENTS_PUBLIC:]
+        del p.grad_batch
+
+        # clip and average private grads
         flat_g = grad_batch_private.reshape(batchsize, -1)
         flat_g = torch.div(flat_g, grad_norm_list.reshape(-1, 1))
-        p.grad_batch[Config.NUM_CLIENTS_PUBLIC:] = flat_g.reshape(batchsize, *p.shape)
-        p.grad += (torch.mean(p.grad_batch, dim=0) * (Config.NUM_CLIENT_AGG / Config.NUM_CLIENTS_PUBLIC))
-        del p.grad_batch
-        # Add DP noise to gradients
-        noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C, size=p.grad.size(), device=p.device) / batchsize
-        p.grad += noise
+        grad_batch_private_clipped = flat_g.reshape(batchsize, *p.shape)
+        mean_grad_private_clipped = grad_batch_private_clipped.mean(dim=0)
+
+        # Add noise to mean of private grads
+        noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C,
+                             size=mean_grad_private_clipped.size(), device=p.device) / batchsize if Config.ADD_DP_NOISE\
+            else torch.zeros_like(mean_grad_private_clipped)
+
+        # print('clip', Config.DP_C)
+        # print('sigma', Config.DP_SIGMA)
+        # print('noise', torch.linalg.norm(noise), torch.abs(noise).max())
+        # print('mean_grad_private_clipped',
+        #       torch.linalg.norm(mean_grad_private_clipped), torch.abs(mean_grad_private_clipped).max())
+
+
+        mean_grad_private_clipped_and_noised = mean_grad_private_clipped + noise
+
+        # Multiply public and private users by their proportions
+        p.grad.data = p.grad.data * Config.NUM_CLIENTS_PUBLIC + \
+                      mean_grad_private_clipped_and_noised * Config.NUM_CLIENT_AGG
+        # Divide by sum of private and public to get mean of grads
+        p.grad.data /= (Config.NUM_CLIENTS_PUBLIC + Config.NUM_CLIENT_AGG)
+
     del grad_norm_list
 
 
@@ -154,7 +177,6 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
                     correct_counter += int(correct)
                     del predicted
                 del outputs
-
 
                 # print('after backward')
 
@@ -307,6 +329,15 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
                                   size=residual_grad.shape,
                                   device=residual_grad.device) / batchsize
 
+        print('clip0', Config.GEP_CLIP0)
+        print('clip1', Config.GEP_CLIP1)
+        print('sigma0', Config.GEP_SIGMA0)
+        print('sigma1', Config.GEP_SIGMA1)
+        print('theta_noise', torch.linalg.norm(theta_noise), torch.abs(theta_noise).max())
+        print('grad_noise', torch.linalg.norm(grad_noise), torch.abs(grad_noise).max())
+        print('clipped_theta', torch.linalg.norm(clipped_theta), torch.abs(clipped_theta).max())
+        print('residual_grad', torch.linalg.norm(residual_grad), torch.abs(residual_grad).max())
+
         clipped_theta += theta_noise
         residual_grad += grad_noise
         del theta_noise, grad_noise
@@ -321,11 +352,15 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         shape = p.grad.shape
         numel = p.grad.numel()
 
-        p.grad.data += (noisy_grad[offset:offset + numel].view(shape)
-                        * (Config.NUM_CLIENT_AGG / Config.NUM_CLIENTS_PUBLIC))
-        # p.grad.data *= batchsize
-        # p.grad.data *= Config.BATCH_SIZE
-        # p.grad.data = Config.BATCH_SIZE * clean_grad[offset:offset + numel].view(shape)
+        if Config.GEP_HISTORY_GRADS > 0 and noisy_grad[offset:offset + numel].numel() < numel:
+            p.grad.data = torch.zeros(size=shape)
+        else:
+            # Multiply public and private users by their proportions
+            p.grad.data = p.grad.data * Config.NUM_CLIENTS_PUBLIC + \
+                          noisy_grad[offset:offset + numel].view(shape) * Config.NUM_CLIENT_AGG
+            # Divide by sum of private and public to get mean of grads
+            p.grad.data /= (Config.NUM_CLIENTS_PUBLIC + Config.NUM_CLIENT_AGG)
+
         if accumulated_grads is not None:
             accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
         offset += numel

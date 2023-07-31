@@ -102,8 +102,8 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     if Config.USE_GEP:
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
         # gep.get_anchor_space(model, loss_func=loss_fn)
-        if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
-            clients_in_epoch = [*gep.public_users, *clients_in_epoch]
+    if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
+        clients_in_epoch = [*utils.public_users, *clients_in_epoch]
 
     num_clients_in_epoch = len(clients_in_epoch)
 
@@ -148,8 +148,8 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         # pull gradients from user
         for p, lp in zip(model.parameters(), local_model.parameters()):
             p.grad_batch[i] = lp.grad.data
-            if i < len(gep.public_users) - 1:
-                p.grad.data += lp.grad.data.squeeze() / len(gep.public_users)
+            if i < Config.NUM_CLIENTS_PUBLIC - 1:
+                p.grad.data += lp.grad.data.squeeze() / Config.NUM_CLIENTS_PUBLIC
 
         if Config.USE_GEP and i == len(gep.public_users) - 1:
             gep.get_anchor_space(model, loss_func=loss_fn)
@@ -176,7 +176,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     if Config.USE_GEP:
         assert Config.USE_SGD_DP is False, 'Use GEP or SGD_DP. Not both'
         gep_batch(accumulated_grads=None, gep=gep, model=model, batchsize=Config.NUM_CLIENT_AGG)
-    elif Config.ADD_DP_NOISE:
+    else:
         sgd_dp_batch(model=model, batchsize=Config.NUM_CLIENT_AGG)
 
     optimizer.step()
@@ -285,16 +285,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             if not Config.USE_GP:
                 log_dict.update({'epoch_train_loss': epoch_train_loss,
                                  'epoch_train_acc': epoch_train_acc})
+
+            if Config.USE_GEP:
+                errs = torch.tensor(gep.approx_errors)
+                log_dict.update({'epoch_gep_avg_approx_error': errs.mean(), 'epoch_gep_std_approx_error': errs.std()})
+
             wandb.log(log_dict)
-            # wandb.log({
-            #     'epoch_train_loss': epoch_train_loss,
-            #     'epoch_train_acc': epoch_train_acc,
-            #     'epoch_validation_loss': val_loss,
-            #     'epoch_validation_acc': val_acc,
-            #     'epoch_validation_loss_std': val_loss_std,
-            #     'epoch_validation_acc_std': val_acc_std,
-            #     'best_epoch_validation_acc': best_epoch_validation_acc
-            # })
 
         if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')

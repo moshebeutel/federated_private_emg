@@ -16,20 +16,17 @@ from train.federated_utils import federated_train_model
 from train.params import TrainParams
 
 
-def get_exp_name_():
-    sigma = f'[{"%.3f" % Config.GEP_SIGMA0},{"%.3f" % Config.GEP_SIGMA1}' if Config.USE_GEP else Config.DP_SIGMA
-    # sigma0 = '%.3f' % Config.GEP_SIGMA0
-    # sigma1 = '%.3f' % Config.GEP_SIGMA1
-    # clip0 = '%.3f' % Config.GEP_CLIP0
-    # clip1 = '%.3f' % Config.GEP_CLIP1
-    clip = f'[{"%.3f" % Config.GEP_CLIP0},{"%.3f" % Config.GEP_CLIP1}' if Config.USE_GEP else Config.DP_C
-    # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-    # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} ' \
-    #            f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
-    #            f' residual gradients {Config.GEP_USE_RESIDUAL}'
-    use_residual = 'using' if Config.GEP_USE_RESIDUAL else 'not using'
-    use_residual = (use_residual + ' residual grads') if Config.USE_GEP else ''
-    exp_name = f'{Config.DATASET.name} {Config.DP_METHOD.name} clip={clip} sigma={sigma} {use_residual}'
+def get_exp_name():
+    sigma = f"{'%.3f' % Config.GEP_SIGMA0},{'%.3f' % Config.GEP_SIGMA1}" if Config.USE_GEP \
+        else f"{'%.3f' % Config.DP_SIGMA}"
+    clip = f"{'%.3f' % Config.GEP_CLIP0},{'%.3f' % Config.GEP_CLIP1}" if Config.USE_GEP else f"{'%.3f' % Config.DP_C}"
+
+    exp_name = f'{Config.DATASET} {Config.DP_METHOD} clip={clip} epsilon={Config.DP_EPSILON} sigma={sigma} ' \
+               f'residual gradients {Config.GEP_USE_RESIDUAL} train users {Config.NUM_CLIENTS_TRAIN} ' \
+               f'public users {Config.NUM_CLIENTS_PUBLIC} agg {Config.NUM_CLIENT_AGG}'
+
+    print('exp_name:', exp_name)
+
     return exp_name
 
 
@@ -39,7 +36,7 @@ def main():
 
         print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
 
-    q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
+    # q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
 
     # if Config.USE_GEP:
     #     sigma0 = '%.3f' % Config.GEP_SIGMA0
@@ -63,21 +60,21 @@ def main():
     # logger.info(exp_name)
     # update_accountant_params(output_fn=logging.info)
 
-    exp_name = get_exp_name_()
-
-    print(exp_name)
+    update_accountant_params()
+    exp_name = get_exp_name()
 
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         config_dict = Config.to_dict()
-        users = train_user_list + validation_user_list + test_user_list
-        for u in users:
-            config_dict[f'user_{u}_bias'] = USERS_BIASES[u]
-        for u in users:
-            config_dict[f'user_{u}_variance'] = USERS_VARIANCES[u]
-        config_dict.update({'train_user_list': train_user_list,
-                            'validation_user_list': validation_user_list,
-                            'test_user_list': test_user_list})
+        # users = train_user_list + validation_user_list + test_user_list
+        # for u in users:
+        #     config_dict[f'user_{u}_bias'] = USERS_BIASES[u]
+        # for u in users:
+        # #     config_dict[f'user_{u}_variance'] = USERS_VARIANCES[u]
+        # config_dict.update({'train_user_list': train_user_list,
+        #                     'validation_user_list': validation_user_list,
+        #                     'test_user_list': test_user_list})
+
         wandb.config.update(config_dict)
 
     single_train(exp_name)
@@ -121,8 +118,7 @@ def single_train(exp_name):
 
     gep = None
     if Config.USE_GEP:
-
-        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else len(public_users) + Config.NUM_CLIENT_AGG
+        batch_size_for_gep = Config.BATCH_SIZE if Config.INTERNAL_BENCHMARK else Config.NUM_CLIENT_AGG
 
         model, loss_fn, gep = attach_gep(net=model,
                                          loss_fn=loss_fn,
@@ -159,8 +155,8 @@ def update_accountant_params(output_fn=lambda s: None):
     if Config.DP_METHOD == Config.DP_METHOD_TYPE.NO_DP:
         sigma = 0.0
     else:
-        sigma, eps = get_sigma(sampling_prob, steps, Config.DP_EPSILON,
-                               Config.DP_DELTA, rgp=Config.USE_GEP and Config.GEP_USE_RESIDUAL)
+        sigma, eps = get_sigma(q=sampling_prob, T=steps, eps=Config.DP_EPSILON,
+                               delta=Config.DP_DELTA, rgp=Config.USE_GEP and Config.GEP_USE_RESIDUAL)
 
     if Config.USE_GEP:
         Config.GEP_SIGMA0 = sigma
@@ -172,21 +168,14 @@ def update_accountant_params(output_fn=lambda s: None):
 
 
 def sweep_train(config=None):
-    update_accountant_params()
-
-    exp_name = get_exp_name_()
-
-    print(exp_name)
-
     with wandb.init(config=config):
 
         # config = {**{'_NAME': exp_name}, **wandb.config}
         config = wandb.config
-        config['clip'] = 0.01
-        print(config)
+
         if config.dp == 'NO_DP' and config.epsilon != 8.0:
             return
-        Config.USE_GP = (config.use_gp == 1)
+        # Config.USE_GP = (config.use_gp == 1)
 
         if config.dp == 'SGD_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
@@ -220,8 +209,10 @@ def sweep_train(config=None):
         # Config.GEP_NUM_GROUPS = config.gep_num_groups
         # Config.GEP_POWER_ITER = config.gep_power_iter
 
-        if not Config.USE_GEP:
-            Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+        # if not Config.USE_GEP:
+        #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+
+        print(config)
 
         if Config.USE_GEP:
             Config.GEP_CLIP0 = config.clip
@@ -234,15 +225,17 @@ def sweep_train(config=None):
         if Config.DP_METHOD != Config.DP_METHOD_TYPE.NO_DP:
             Config.DP_EPSILON = config.epsilon
 
-        # sigma0 = '%.3f' % Config.GEP_SIGMA0
-        # sigma1 = '%.3f' % Config.GEP_SIGMA1
-        # clip0 = '%.3f' % Config.GEP_CLIP0
-        # clip1 = '%.3f' % Config.GEP_CLIP1
+        update_accountant_params()
 
-        # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1} sigma=[{sigma0},{sigma1}] residual gradients {Config.GEP_USE_RESIDUAL}'
+        exp_name = get_exp_name()
+
+        print(exp_name)
         # config.LEARNING_RATE = config.learning_rate
         # config.BATCH_SIZE = config.batch_size
         config['_NAME'] = exp_name
+        # config.update({'train_user_list': train_user_list,
+        #                     'validation_user_list': validation_user_list,
+        #                     'test_user_list': test_user_list})
         config.update(Config.to_dict())
         single_train(exp_name)
 
@@ -275,17 +268,18 @@ def run_sweep():
         # 'batch_size': {
         #     'values': [128, 256, 512]
         # },
-        # 'clip': {
-        #     'values': [0.1, 0.01]
-        # },
+        'clip': {
+            'values': [0.0001, 0.001, 0.01, 0.1, 1.0]
+        },
         # 'sigma': {
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
-        'num_run': {
-            'values': [1, 2, 3]
-        },
+        # 'num_run': {
+        #     'values': [1, 2, 3, 4, 5]
+        # },
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
+            # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
         #     'values': [0, 1]
@@ -294,9 +288,12 @@ def run_sweep():
         #     'values': [50]
         # },
         'dp': {
-            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
+            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
+            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
-            'values': ['SGD_DP']
+            # 'values': ['SGD_DP']
+            # 'values': ['NO_DP']
+
         },
         # 'classes_each_user': {
         #     'values': [3]
@@ -304,19 +301,19 @@ def run_sweep():
         # 'internal_epochs': {
         #     'values': [1, 5]
         # },
-        'use_gp': {
-            'values': [0, 1]
-        },
+        # 'use_gp': {
+        #     'values': [0, 1]
+        # },
 
         # 'gep_num_bases': {
-        #     'values': [10]
+        #     'values': [6, 9, 12, 15]
         # },
         #
         # 'gep_num_groups': {
         #     'values': [15, 20]
         # },
         # 'gep_power_iter': {
-        #     'values': [3, 6]
+        #     'values': [1, 3, 6]
         # }
     })
 
@@ -326,5 +323,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    main()
-    # run_sweep()
+    # main()
+    run_sweep()

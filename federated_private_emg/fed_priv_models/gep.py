@@ -66,7 +66,7 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_p = pub_grad.shape[1]
 
     num_bases = min(num_bases, num_p)
-    # print(pub_grad.shape[1], num_bases)
+    print(pub_grad.shape[1], num_bases)
     L = torch.normal(0, 1.0, size=(pub_grad.shape[1], num_bases), device=pub_grad.device)
     for i in range(power_iter):
         # print('get bases: iter', i)
@@ -75,6 +75,7 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
         # print(R,L)
         orthogonalize(L)
     error_rate = check_approx_error(L, pub_grad)
+
     return L, num_bases, error_rate
 
 
@@ -89,6 +90,8 @@ class GEP(nn.Module):
         self.power_iter = power_iter
         self.batch_size = batch_size
         self.approx_error = {}
+        self.base_history = Config.GEP_HISTORY_GRADS
+        self.selected_bases_list_history_list = []
 
     def get_approx_grad(self, embedding):
         bases_list, num_bases_list, num_param_list = self.selected_bases_list, self.num_bases_list, self.num_param_list
@@ -139,7 +142,7 @@ class GEP(nn.Module):
 
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
-        # print('get_anchor_space')
+        print('get_anchor_space')
         anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
         # if self.selected_bases_list \
         # else torch.ones((self.batch_size, self.num_params))
@@ -152,9 +155,9 @@ class GEP(nn.Module):
 
             sqrt_num_param_list = np.sqrt(np.array(num_param_list))
             # *** Cancel normalization to avoid all zeros when casting to int in TOY_STORY
-            # num_bases_list = self.num_bases * (sqrt_num_param_list / np.sum(sqrt_num_param_list))
-            num_bases_list = self.num_bases * sqrt_num_param_list
-            num_bases_list = num_bases_list.astype(np.int)
+            num_bases_list = self.num_bases * (sqrt_num_param_list / np.sum(sqrt_num_param_list))
+            # num_bases_list = self.num_bases * sqrt_num_param_list
+            num_bases_list = num_bases_list.astype(int)
 
             offset = 0
             device = next(net.parameters()).device
@@ -172,7 +175,18 @@ class GEP(nn.Module):
                 selected_bases_list.append(selected_bases.to(device))
                 del pub_grad, pub_error
 
-            self.selected_bases_list = selected_bases_list
+            if Config.GEP_HISTORY_GRADS > 0:
+                min_shape = selected_bases_list[0].shape
+                self.selected_bases_list_history_list.append(
+                torch.stack([base[:min_shape[0], :min_shape[1]] for base in selected_bases_list]))
+                tmp = torch.stack(self.selected_bases_list_history_list)
+                self.selected_bases_list = tmp.mean(dim=0)
+                if len(self.selected_bases_list_history_list) >= self.base_history:
+                    self.selected_bases_list_history_list = self.selected_bases_list_history_list[1:]
+            else:
+                self.selected_bases_list = selected_bases_list
+
+            print(f'selected bases history list len {len(self.selected_bases_list_history_list)}')
             print(f'selected bases list len {len(self.selected_bases_list)}')
             # print('self.selected_bases_list', self.selected_bases_list)
             self.num_bases_list = num_bases_list
@@ -198,7 +212,12 @@ class GEP(nn.Module):
                 # print(f'selected bases list len {len(self.selected_bases_list)}')
                 selected_bases = self.selected_bases_list[i]
                 # print(selected_bases.shape)
-                embedding = torch.matmul(grad, selected_bases)
+                if Config.GEP_HISTORY_GRADS > 0:
+                    min_shape = min(grad.shape[1], selected_bases.shape[0])
+                    embedding = torch.matmul(grad[:, :min_shape], selected_bases[:min_shape, :])
+                else:
+                    embedding = torch.matmul(grad, selected_bases)
+
                 num_bases = self.num_bases_list[i]
                 if logging:
                     cur_approx = torch.matmul(torch.mean(embedding, dim=0).view(1, -1), selected_bases.T).view(-1)
@@ -226,7 +245,12 @@ class GEP(nn.Module):
             del clipped_embedding
 
             no_reduction_approx = self.get_approx_grad(concatnated_embedding)
-            residual_gradients = target_grad - no_reduction_approx
+            if Config.GEP_HISTORY_GRADS > 0:
+                min_shape = min(target_grad.shape[1], no_reduction_approx.shape[1])
+                residual_gradients = target_grad[:, :min_shape] - no_reduction_approx[:, :min_shape]
+            else:
+                residual_gradients = target_grad - no_reduction_approx
+
             clip_column(residual_gradients, clip=self.clip1)  # inplace clipping to save memory
             clipped_residual_gradients = residual_gradients
             if logging:
