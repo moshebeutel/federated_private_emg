@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 
 import torch.nn
 
@@ -17,13 +18,17 @@ from train.params import TrainParams
 
 
 def get_exp_name():
-    sigma = f"{'%.3f' % Config.GEP_SIGMA0},{'%.3f' % Config.GEP_SIGMA1}" if Config.USE_GEP \
-        else f"{'%.3f' % Config.DP_SIGMA}"
-    clip = f"{'%.3f' % Config.GEP_CLIP0},{'%.3f' % Config.GEP_CLIP1}" if Config.USE_GEP else f"{'%.3f' % Config.DP_C}"
-
-    exp_name = f'{Config.DATASET} {Config.DP_METHOD} clip={clip} epsilon={Config.DP_EPSILON} sigma={sigma} ' \
-               f'residual gradients {Config.GEP_USE_RESIDUAL} train users {Config.NUM_CLIENTS_TRAIN} ' \
-               f'public users {Config.NUM_CLIENTS_PUBLIC} agg {Config.NUM_CLIENT_AGG}'
+    sigma = f"{'%.5f' % Config.GEP_SIGMA0},{'%.3f' % Config.GEP_SIGMA1}" if Config.USE_GEP \
+        else f"{'%.5f' % Config.DP_SIGMA}"
+    clip = f"{'%.5f' % Config.GEP_CLIP0},{'%.3f' % Config.GEP_CLIP1}" if Config.USE_GEP else f"{'%.3f' % Config.DP_C}"
+    dp = Config.DP_METHOD.name
+    dp += f' clip {clip}'
+    if dp == 'GEP':
+        dp += (' with residuals' if Config.GEP_USE_RESIDUAL else ' without residuals')
+        # dp += f' num_bases {Config.GEP_NUM_BASES} power iter {Config.GEP_POWER_ITER}'
+    exp_name = f'{Config.DATASET.name} {dp}'
+    if dp != 'NO_DP':
+        exp_name += f' epsilon={Config.DP_EPSILON} sigma={sigma}'
 
     print('exp_name:', exp_name)
 
@@ -81,6 +86,8 @@ def main():
 
 
 def single_train(exp_name):
+    if Config.WRITE_TO_WANDB:
+        wandb.run.name = exp_name
     set_seed(Config.SEED)
     logger = utils.config_logger(f'{exp_name}_logger',
                                  level=logging.DEBUG, log_folder='../log/')
@@ -170,14 +177,23 @@ def update_accountant_params(output_fn=lambda s: None):
     output_fn(accountant_params_string())
 
 
-def sweep_train(config=None):
+def sweep_train(sweep_id, config=None):
     with wandb.init(config=config):
 
-        # config = {**{'_NAME': exp_name}, **wandb.config}
         config = wandb.config
+        config.update({'sweep_id':sweep_id})
 
-        if config.dp == 'NO_DP' and config.epsilon != 8.0:
+        # if config.dp not in ['GEP_RESIDUALS', 'GEP_NO_RESIDUALS'] and not (config.gep_num_bases == 30
+        #                                                                    and config.gep_power_iter == 1):
+        #     return
+
+        # if config.dp == 'NO_DP' and not (config.epsilon == 8.0 and config.gep_num_bases == 30
+        #                                  and config.gep_power_iter == 1):
+        #     return
+
+        if config.dp == 'NO_DP' and not config.epsilon == 8.0:
             return
+
         Config.USE_GP = (config.use_gp == 1)
 
         if config.dp == 'SGD_DP':
@@ -219,6 +235,17 @@ def sweep_train(config=None):
             Config.DP_C = config.clip
         # Config.GEP_SIGMA0 = config.sigma
         # Config.GEP_SIGMA1 = config.sigma
+        # if not Config.USE_GEP:
+        #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+        # if "clip" not in config:
+        #     config['clip'] = 0.001
+        # print(config)
+        #
+        # if Config.USE_GEP:
+        #     Config.GEP_CLIP0 = config.clip
+        #     Config.GEP_CLIP1 = config.clip / 5.0
+        # else:
+        #     Config.DP_C = config.clip
 
         if Config.DP_METHOD != Config.DP_METHOD_TYPE.NO_DP:
             Config.DP_EPSILON = config.epsilon
@@ -230,11 +257,14 @@ def sweep_train(config=None):
         print(exp_name)
         # config.LEARNING_RATE = config.learning_rate
         # config.BATCH_SIZE = config.batch_size
-        config['_NAME'] = exp_name
+
         # config.update({'train_user_list': train_user_list,
         #                     'validation_user_list': validation_user_list,
         #                     'test_user_list': test_user_list})
-        config.update(Config.to_dict())
+        config.update({'app_config_dict': Config.to_dict()})
+
+        print(config)
+
         single_train(exp_name)
 
 
@@ -276,7 +306,7 @@ def run_sweep():
         #     'values': [1, 2, 3, 4, 5]
         # },
         'epsilon': {
-            'values': [100.0, 8.0, 3.0, 1.0, 0.1]
+            'values': [8.0, 3.0, 1.0]
             # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
@@ -306,10 +336,17 @@ def run_sweep():
         'gep_num_bases': {
             'values': [21, 30]
         },
+
+        # 'gep_num_bases': {
+        #     'values': [18, 30]
+        # },
         #
         # 'gep_num_groups': {
         #     'values': [15, 20]
         # },
+        # 'gep_power_iter': {
+        #     'values': [1, 5]
+        # }
         'gep_power_iter': {
             'values': [1, 5]
         }
@@ -317,7 +354,7 @@ def run_sweep():
 
     sweep_id = wandb.sweep(sweep_config, project="pytorch-sweeps-demo")
 
-    wandb.agent(sweep_id, sweep_train)
+    wandb.agent(sweep_id,  partial(sweep_train,sweep_id=sweep_id))
 
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ from math import sqrt, log
 class Config:
     WORKDIR = os.getcwd()
     LOG_FOLDER = os.path.join(WORKDIR, 'log')
+    SWEEP_RESULTS_DIR = '/home/user/GIT/gp_fed_impl/sweep_results'
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -16,7 +17,7 @@ class Config:
     DEVICE = 'cpu'
     BATCH_SIZE = 512
     NUM_EPOCHS = 100
-    DETERMINISTIC_SEED = False
+    DETERMINISTIC_SEED = True
     SEED = 42 if DETERMINISTIC_SEED else int(datetime.now().timestamp())
 
     EARLY_STOP_INCREASING_LOSS_COUNT = 10
@@ -37,7 +38,7 @@ class Config:
     WRITE_TO_WANDB = True
 
     # GP
-    USE_GP = False
+    USE_GP = True
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
@@ -79,8 +80,8 @@ class Config:
     NUM_CLIENTS_TEST = 400
     SAMPLE_CLIENTS_WITH_REPLACEMENT = True
     NUM_INTERNAL_EPOCHS = 1
-    CIFAR10_CLASSES_PER_USER = 10 # 2
-    CIFAR100_CLASSES_PER_USER = 100 # 10
+    CIFAR10_CLASSES_PER_USER = 10    # 2
+    CIFAR100_CLASSES_PER_USER = 100  # 10
 
     # DATASET
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10', 'CIFAR100'])

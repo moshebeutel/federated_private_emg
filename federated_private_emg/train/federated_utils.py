@@ -15,7 +15,7 @@ from fed_priv_models.gep import GEP
 from fed_priv_models.pFedGP.utils import build_tree, eval_model
 from train.params import TrainParams
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch, calc_metrics
-
+import pandas as pd
 
 def create_public_dataset(public_users: str or list[str]):
     print('Create public dataset for users:', public_users)
@@ -324,9 +324,15 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 test_acc += acc / len(test_user_list)
                 test_accuracies[u] = acc
 
-        if log2wandb:
-            wandb.log({'test_acc': test_acc})
-
+        if Config.WRITE_TO_WANDB:
+            wandb.log({'test_acc':test_acc})
+            new_wandb_row = pd.DataFrame({**{k:v for (k,v) in wandb.config.items()
+                                             if k not in ['app_config_dict', 'sweep_id']},
+                                          **{'best_epoch_validation_acc': best_epoch_validation_acc,
+                                             'test_acc': test_acc}}, index=[0])
+            sweep_id = wandb.config["sweep_id"]
+            sweep_csv_path = f'{Config.SWEEP_RESULTS_DIR}/{sweep_id}.csv'
+            new_wandb_row.to_csv(sweep_csv_path, mode='a', index=False, header=True)
         # output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
         if Config.USE_GEP:
             output_fn(accountant_params_string())
