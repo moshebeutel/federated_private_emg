@@ -9,6 +9,7 @@ from math import sqrt, log
 class Config:
     WORKDIR = os.getcwd()
     LOG_FOLDER = os.path.join(WORKDIR, 'log')
+    SWEEP_RESULTS_DIR = '/home/user/GIT/gp_fed_impl/sweep_results'
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -68,7 +69,7 @@ class Config:
     ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 10, 50, 500
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 10, 50, 510
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -76,11 +77,11 @@ class Config:
     #     NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
 
     NUM_CLIENTS_VAL = 50
-    NUM_CLIENTS_TEST = 50
+    NUM_CLIENTS_TEST = 400
     SAMPLE_CLIENTS_WITH_REPLACEMENT = True
     NUM_INTERNAL_EPOCHS = 1
-    CIFAR10_CLASSES_PER_USER = 2
-    CIFAR100_CLASSES_PER_USER = 10
+    CIFAR10_CLASSES_PER_USER = 10    # 2
+    CIFAR100_CLASSES_PER_USER = 100  # 10
 
     # DATASET
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10', 'CIFAR100'])
@@ -98,9 +99,9 @@ class Config:
 
     CLASSES_PER_USER = CIFAR10_CLASSES_PER_USER if CIFAR10_DATA else CIFAR100_CLASSES_PER_USER
     # GEP
-    GEP_NUM_BASES = 15
-    GEP_CLIP0 = 0.01  # 10.0  # 50
-    GEP_CLIP1 = 0.002  # 20
+    GEP_NUM_BASES = 30
+    GEP_CLIP0 = 0.001  # 10.0  # 50
+    GEP_CLIP1 = 0.0002  # 20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     # GEP_SIGMA1 = 2.0 * GEP_CLIP1 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
     GEP_SIGMA0 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
@@ -111,7 +112,7 @@ class Config:
     GEP_HISTORY_GRADS = 0
 
     # DP_SGD
-    DP_C = 0.01  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
+    DP_C = 0.001  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
     DP_SIGMA = sqrt(2 * log(1.25 / DP_DELTA)) / DP_EPSILON  # 0.1 * 3.776479532659047  # sqrt(2 * log(1.25 / DP_DELTA))/
 
     # TOY STORY
