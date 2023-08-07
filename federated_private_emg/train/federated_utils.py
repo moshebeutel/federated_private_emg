@@ -310,7 +310,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             test_loss = torch.mean(torch.tensor([test['loss'] for test in test_results.values()]))
             test_accs_list = [test['correct'] / test['total'] for test in test_results.values()]
             test_accuracies = {u: acc for (u, acc) in zip(test_results.keys(), test_accs_list)}
-            test_acc = torch.mean(torch.tensor(test_accs_list))
+            test_acc = 100.0 * torch.mean(torch.tensor(test_accs_list))
 
         else:
             for u in test_user_list:
@@ -323,6 +323,9 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 test_loss += loss / len(test_user_list)
                 test_acc += acc / len(test_user_list)
                 test_accuracies[u] = acc
+
+        if log2wandb:
+            wandb.log({'test_acc': test_acc})
 
         # output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
         if Config.USE_GEP:

@@ -178,7 +178,7 @@ def sweep_train(config=None):
 
         if config.dp == 'NO_DP' and config.epsilon != 8.0:
             return
-        # Config.USE_GP = (config.use_gp == 1)
+        Config.USE_GP = (config.use_gp == 1)
 
         if config.dp == 'SGD_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
@@ -205,18 +205,12 @@ def sweep_train(config=None):
             Config.GEP_USE_RESIDUAL = False
             Config.ADD_DP_NOISE = True
 
-        # Config.USE_GEP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.GEP)
-        # Config.USE_SGD_DP = (Config.DP_METHOD == Config.DP_METHOD_TYPE.SGD_DP)
-        # Config.GEP_USE_RESIDUAL = (Config.USE_GEP and config.dp == 'GEP_RESIDUALS')
         Config.GEP_NUM_BASES = config.gep_num_bases
         # Config.GEP_NUM_GROUPS = config.gep_num_groups
         Config.GEP_POWER_ITER = config.gep_power_iter
 
-        # if not Config.USE_GEP:
-        #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
-        if "clip" not in config:
-            config['clip']=0.001
-        print(config)
+
+
 
         if Config.USE_GEP:
             Config.GEP_CLIP0 = config.clip
@@ -282,7 +276,7 @@ def run_sweep():
         #     'values': [1, 2, 3, 4, 5]
         # },
         'epsilon': {
-            'values': [8.0, 3.0, 1.0]
+            'values': [100.0, 8.0, 3.0, 1.0, 0.1]
             # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
@@ -305,19 +299,19 @@ def run_sweep():
         # 'internal_epochs': {
         #     'values': [1, 5]
         # },
-        # 'use_gp': {
-        #     'values': [0, 1]
-        # },
+        'use_gp': {
+            'values': [0, 1]
+        },
 
         'gep_num_bases': {
-            'values': [40, 70]
+            'values': [21, 30]
         },
         #
         # 'gep_num_groups': {
         #     'values': [15, 20]
         # },
         'gep_power_iter': {
-            'values': [12, 15]
+            'values': [1, 5]
         }
     })
 
