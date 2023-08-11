@@ -9,7 +9,7 @@ from math import sqrt, log
 class Config:
     WORKDIR = os.getcwd()
     LOG_FOLDER = os.path.join(WORKDIR, 'log')
-    SWEEP_RESULTS_DIR = '/home/user/GIT/gp_fed_impl/sweep_results'
+    SWEEP_RESULTS_DIR = '/home/user1/GIT/federated_private_emg/sweep_results'
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -38,7 +38,7 @@ class Config:
     WRITE_TO_WANDB = True
 
     # GP
-    USE_GP = True
+    USE_GP = False
     GP_KERNEL_FUNCTION = 'RBFKernel'
     assert GP_KERNEL_FUNCTION in ['RBFKernel', 'LinearKernel', 'MaternKernel'], \
         f'GP_KERNEL_FUNCTION={GP_KERNEL_FUNCTION} and should be one of RBFKernel, LinearKernel, MaternKernel'
@@ -69,7 +69,7 @@ class Config:
     ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 10, 50, 510
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 200, 50, 400
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -99,7 +99,7 @@ class Config:
 
     CLASSES_PER_USER = CIFAR10_CLASSES_PER_USER if CIFAR10_DATA else CIFAR100_CLASSES_PER_USER
     # GEP
-    GEP_NUM_BASES = 30
+    GEP_NUM_BASES = 600
     GEP_CLIP0 = 0.001  # 10.0  # 50
     GEP_CLIP1 = 0.0002  # 20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
@@ -110,6 +110,7 @@ class Config:
     GEP_NUM_GROUPS = 3
     GEP_USE_RESIDUAL = True
     GEP_HISTORY_GRADS = 0
+    GEP_USE_PCA = 1
 
     # DP_SGD
     DP_C = 0.001  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))

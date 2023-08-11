@@ -191,11 +191,11 @@ def sweep_train(sweep_id, config=None):
         #                                  and config.gep_power_iter == 1):
         #     return
 
-        if config.dp == 'NO_DP' and not config.epsilon == 8.0:
-            return
+        # if config.dp == 'NO_DP' and not config.epsilon == 8.0:
+        #     return
 
-        Config.USE_GP = (config.use_gp == 1)
-
+        # Config.USE_GP = (config.use_gp == 1)
+        Config.SEED = config.seed
         if config.dp == 'SGD_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
             Config.USE_GEP = False
@@ -221,31 +221,19 @@ def sweep_train(sweep_id, config=None):
             Config.GEP_USE_RESIDUAL = False
             Config.ADD_DP_NOISE = True
 
-        Config.GEP_NUM_BASES = config.gep_num_bases
-        # Config.GEP_NUM_GROUPS = config.gep_num_groups
-        Config.GEP_POWER_ITER = config.gep_power_iter
+        Config.NUM_CLIENTS_PUBLIC = config.num_clients_public
+        Config.GEP_NUM_BASES = Config.NUM_CLIENTS_PUBLIC * Config.GEP_NUM_GROUPS
+        # Config.GEP_POWER_ITER = config.gep_power_iter
+        Config.GEP_USE_PCA = (config.use_pca == 1)
 
-
-
+        if "clip" not in config:
+            config['clip'] = 0.001
 
         if Config.USE_GEP:
             Config.GEP_CLIP0 = config.clip
             Config.GEP_CLIP1 = config.clip / 5.0
         else:
             Config.DP_C = config.clip
-        # Config.GEP_SIGMA0 = config.sigma
-        # Config.GEP_SIGMA1 = config.sigma
-        # if not Config.USE_GEP:
-        #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
-        # if "clip" not in config:
-        #     config['clip'] = 0.001
-        # print(config)
-        #
-        # if Config.USE_GEP:
-        #     Config.GEP_CLIP0 = config.clip
-        #     Config.GEP_CLIP1 = config.clip / 5.0
-        # else:
-        #     Config.DP_C = config.clip
 
         if Config.DP_METHOD != Config.DP_METHOD_TYPE.NO_DP:
             Config.DP_EPSILON = config.epsilon
@@ -296,15 +284,15 @@ def run_sweep():
         # 'batch_size': {
         #     'values': [128, 256, 512]
         # },
-        # 'clip': {
-        #     'values': [0.0001, 0.001, 0.01, 0.1, 1.0]
-        # },
+        'clip': {
+            'values': [0.0001, 0.001, 0.01]
+        },
         # 'sigma': {
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
-        # 'num_run': {
-        #     'values': [1, 2, 3, 4, 5]
-        # },
+        'seed': {
+            'values': [1, 2, 3]
+        },
         'epsilon': {
             'values': [8.0, 3.0, 1.0]
             # 'values': [0.5, 0.1, 0.01, 0.001]
@@ -318,27 +306,28 @@ def run_sweep():
         'dp': {
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
-            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
+            'values': ['GEP_NO_RESIDUALS']
             # 'values': ['SGD_DP']
             # 'values': ['NO_DP']
 
         },
+        'use_pca': {
+            'values': [1, 0]
+        },
+        'num_clients_public': {
+            'values': [200, 100, 50]
+        }
         # 'classes_each_user': {
         #     'values': [3]
         # },
         # 'internal_epochs': {
         #     'values': [1, 5]
         # },
-        'use_gp': {
-            'values': [0, 1]
-        },
-
-        'gep_num_bases': {
-            'values': [21, 30]
-        },
-
+        # 'use_gp': {
+        #     'values': [0, 1]
+        # },
         # 'gep_num_bases': {
-        #     'values': [18, 30]
+        #     'values': [21, 30]
         # },
         #
         # 'gep_num_groups': {
@@ -347,9 +336,6 @@ def run_sweep():
         # 'gep_power_iter': {
         #     'values': [1, 5]
         # }
-        'gep_power_iter': {
-            'values': [1, 5]
-        }
     })
 
     sweep_id = wandb.sweep(sweep_config, project="pytorch-sweeps-demo")
