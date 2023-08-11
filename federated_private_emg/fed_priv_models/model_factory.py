@@ -18,7 +18,7 @@ def init_model():
     elif Config.CIFAR_DATA:
         # model = CNNTarget(in_channels=3, n_kernels=16, embedding_dim=10 if Config.CIFAR10_DATA else 100)
         # model = simple_mlp_cls()
-        model = resnet20()
+        model = resnet20(num_classes=10 if Config.CIFAR10_DATA else 100)
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
         # Model3d
