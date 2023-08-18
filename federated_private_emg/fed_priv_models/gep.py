@@ -107,7 +107,8 @@ class GEP(nn.Module):
         self.selected_bases_list_history_list = []
 
     def get_approx_grad(self, embedding):
-        bases_list, num_bases_list, num_param_list = self.selected_bases_list, self.num_bases_list, self.num_param_list
+        bases_list, num_bases_list, num_param_list = (self.selected_bases_list if not Config.GEP_USE_PCA else
+                                                      self.selected_pca_list, self.num_bases_list, self.num_param_list)
         grad_list = []
         offset = 0
         if len(embedding.shape) > 1:
@@ -119,7 +120,10 @@ class GEP(nn.Module):
         for i, bases in enumerate(bases_list):
             num_bases = num_bases_list[i]
 
-            grad = torch.matmul(embedding[:, offset:offset + num_bases].view(bs, -1), bases.T)
+            bases_components = torch.from_numpy(bases.components_) if Config.GEP_USE_PCA else bases.T
+
+            grad = torch.matmul(embedding[:, offset:offset + num_bases].view(bs, -1), bases_components)
+
             if bs > 1:
                 grad_list.append(grad.view(bs, -1))
             else:
