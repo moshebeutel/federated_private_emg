@@ -356,10 +356,11 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
             p.grad.data = torch.zeros(size=shape)
         else:
             # Multiply public and private users by their proportions
-            p.grad.data = p.grad.data * Config.NUM_CLIENTS_PUBLIC + \
+            p.grad.data = p.grad.data * Config.NUM_CLIENTS_PUBLIC * Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING + \
                           noisy_grad[offset:offset + numel].view(shape) * Config.NUM_CLIENT_AGG
             # Divide by sum of private and public to get mean of grads
-            p.grad.data /= (Config.NUM_CLIENTS_PUBLIC + Config.NUM_CLIENT_AGG)
+            p.grad.data /= (Config.NUM_CLIENTS_PUBLIC * Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING +
+                            Config.NUM_CLIENT_AGG)
 
         if accumulated_grads is not None:
             accumulated_grads[n] += (Config.BATCH_SIZE * noisy_grad[offset:offset + numel].view(shape))
