@@ -27,7 +27,7 @@ def get_exp_name():
         dp += (' with residuals' if Config.GEP_USE_RESIDUAL else ' without residuals')
         # dp += f' num_bases {Config.GEP_NUM_BASES} power iter {Config.GEP_POWER_ITER}'
     exp_name = f'{Config.DATASET.name} {dp}'
-    if dp != 'NO_DP':
+    if dp != 'NO_DP' and Config.ADD_DP_NOISE:
         exp_name += f' epsilon={Config.DP_EPSILON} sigma={sigma}'
 
     print('exp_name:', exp_name)
@@ -181,7 +181,7 @@ def sweep_train(sweep_id, config=None):
     with wandb.init(config=config):
 
         config = wandb.config
-        config.update({'sweep_id':sweep_id})
+        config.update({'sweep_id': sweep_id})
 
         # if config.dp not in ['GEP_RESIDUALS', 'GEP_NO_RESIDUALS'] and not (config.gep_num_bases == 30
         #                                                                    and config.gep_power_iter == 1):
@@ -222,9 +222,14 @@ def sweep_train(sweep_id, config=None):
             Config.ADD_DP_NOISE = True
 
         Config.NUM_CLIENTS_PUBLIC = config.num_clients_public
+        Config.HIDDEN_DIM = config.hidden_dim
+        Config.GEP_NUM_GROUPS = 1
         Config.GEP_NUM_BASES = Config.NUM_CLIENTS_PUBLIC * Config.GEP_NUM_GROUPS
         # Config.GEP_POWER_ITER = config.gep_power_iter
-        Config.GEP_USE_PCA = (config.use_pca == 1)
+        # Config.GEP_USE_PCA = (config.use_pca == 1)
+        Config.GEP_USE_PCA = 1
+        Config.ADD_DP_NOISE = False
+        Config.NUM_CLIENT_AGG = config.agg
 
         if "clip" not in config:
             config['clip'] = 0.001
@@ -243,12 +248,7 @@ def sweep_train(sweep_id, config=None):
         exp_name = get_exp_name()
 
         print(exp_name)
-        # config.LEARNING_RATE = config.learning_rate
-        # config.BATCH_SIZE = config.batch_size
 
-        # config.update({'train_user_list': train_user_list,
-        #                     'validation_user_list': validation_user_list,
-        #                     'test_user_list': test_user_list})
         config.update({'app_config_dict': Config.to_dict()})
 
         print(config)
@@ -285,24 +285,26 @@ def run_sweep():
         #     'values': [128, 256, 512]
         # },
         'clip': {
-            'values': [0.0001, 0.001, 0.01]
+            # 'values': [0.00001, 0.0001, 0.001]
+            'values': [0.00001]
         },
         # 'sigma': {
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
         'seed': {
-            'values': [1, 2, 3]
+            'values': [10, 50]
+            # 'values': [10,30,50]
         },
         'epsilon': {
-            'values': [8.0, 3.0, 1.0]
+            'values': [1.0]
             # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
         #     'values': [0, 1]
         # },
-        # 'agg': {
-        #     'values': [50]
-        # },
+        'agg': {
+            'values': [10]
+        },
         'dp': {
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
@@ -311,12 +313,16 @@ def run_sweep():
             # 'values': ['NO_DP']
 
         },
-        'use_pca': {
-            'values': [1, 0]
-        },
+        # 'use_pca': {
+        #     'values': [1, 0]
+        # },
         'num_clients_public': {
-            'values': [200, 100, 50]
-        }
+            'values': [200]
+            # 'values': [25, 50, 70, 100]
+        },
+        'hidden_dim': {
+            'values': [15, 25, 30]
+        },
         # 'classes_each_user': {
         #     'values': [3]
         # },
@@ -340,9 +346,9 @@ def run_sweep():
 
     sweep_id = wandb.sweep(sweep_config, project="pytorch-sweeps-demo")
 
-    wandb.agent(sweep_id,  partial(sweep_train,sweep_id=sweep_id))
+    wandb.agent(sweep_id, partial(sweep_train, sweep_id=sweep_id))
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()

@@ -35,7 +35,7 @@ class Config:
     EVAL_EVERY = 1
     TEST_AT_END = True
 
-    WRITE_TO_WANDB = True
+    WRITE_TO_WANDB = False
 
     # GP
     USE_GP = False
@@ -66,10 +66,11 @@ class Config:
     #  The following evaluate from DP_METHOD_TYPE
     USE_GEP = (DP_METHOD == DP_METHOD_TYPE.GEP)
     USE_SGD_DP = (DP_METHOD == DP_METHOD_TYPE.SGD_DP)
-    ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
+    # ADD_DP_NOISE = (DP_METHOD != DP_METHOD_TYPE.NO_DP)
+    ADD_DP_NOISE = False
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 200, 50, 400
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 2, 5, 400
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -99,7 +100,7 @@ class Config:
 
     CLASSES_PER_USER = CIFAR10_CLASSES_PER_USER if CIFAR10_DATA else CIFAR100_CLASSES_PER_USER
     # GEP
-    GEP_NUM_BASES = 600
+
     GEP_CLIP0 = 0.001  # 10.0  # 50
     GEP_CLIP1 = 0.0002  # 20
     # GEP_SIGMA0 = 2.0 * GEP_CLIP0 * sqrt(2.0 * log(1/DP_DELTA))/DP_EPSILON
@@ -107,10 +108,11 @@ class Config:
     GEP_SIGMA0 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_SIGMA1 = 2.0 * sqrt(2.0 * log(1 / DP_DELTA)) / DP_EPSILON
     GEP_POWER_ITER = 1
-    GEP_NUM_GROUPS = 3
-    GEP_USE_RESIDUAL = True
-    GEP_HISTORY_GRADS = 0
+    GEP_NUM_GROUPS = 1
+    GEP_USE_RESIDUAL = False
+    GEP_HISTORY_GRADS = 3
     GEP_USE_PCA = 1
+    GEP_NUM_BASES = NUM_CLIENTS_PUBLIC * GEP_NUM_GROUPS
 
     # DP_SGD
     DP_C = 0.001  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))
@@ -124,7 +126,7 @@ class Config:
     USER_BIAS_SCALE = 0.5 * DATA_SCALE
     DATA_NOISE_SCALE = 0.1 * DATA_SCALE
     DATA_DIM = 24
-    HIDDEN_DIM = 50
+    HIDDEN_DIM = 11
     OUTPUT_DIM = 7
     GEP_PUBLIC_DATA_SIZE = BATCH_SIZE * 4
     PRIVATE_TRAIN_DATA_SIZE = BATCH_SIZE * 4

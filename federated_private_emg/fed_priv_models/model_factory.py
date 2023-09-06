@@ -17,8 +17,8 @@ def init_model():
         model = toy_model()
     elif Config.CIFAR_DATA:
         # model = CNNTarget(in_channels=3, n_kernels=16, embedding_dim=10 if Config.CIFAR10_DATA else 100)
-        # model = simple_mlp_cls()
-        model = resnet20(num_classes=10 if Config.CIFAR10_DATA else 100)
+        model = simple_mlp_cls()
+        # model = resnet20(num_classes=10 if Config.CIFAR10_DATA else 100)
         # model = torchvision.models.resnet18(weights=ResNet18_Weights.DEFAULT)
     else:
         # Model3d
@@ -89,7 +89,8 @@ def model3d():
 def simple_mlp_cls():
     model = torch.nn.Sequential(
         torch.nn.Flatten(start_dim=1, end_dim=-1),
-        torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
+        torch.nn.Linear(in_features=3 * 3 * 1, out_features=Config.HIDDEN_DIM, bias=True),
+        # torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
         torch.nn.ReLU(),
         torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=10, bias=True),
         torch.nn.Softmax(dim=-1))

@@ -1,5 +1,4 @@
 import gc
-import gc
 import logging
 import os
 import random
@@ -16,6 +15,8 @@ from fed_priv_models.pFedGP.utils import build_tree, eval_model
 from train.params import TrainParams
 from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch, calc_metrics
 import pandas as pd
+import numpy as np
+
 
 def create_public_dataset(public_users: str or list[str]):
     print('Create public dataset for users:', public_users)
@@ -240,19 +241,31 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         val_acc = t_accs.mean()
         val_loss_std = t_losses.std()
         val_acc_std = t_accs.std()
+        ordered_accs = [val_accs[u] for u in sorted(val_accs)]
+        val_acc_10th_percentile = np.percentile(ordered_accs, 10)
+        val_acc_50th_percentile = np.percentile(ordered_accs, 50)
+        val_acc_90th_percentile = np.percentile(ordered_accs, 90)
+        # print('Val Acc: %g, 10th percentile: %g, 50th percentile: %g, 90th percentile %g' \
+        #       % (np.average(ordered_accs),
+        #          val_acc_10th_percentile,
+        #          val_acc_50th_percentile,
+        #          val_acc_90th_percentile))
 
         # epoch_pbar.set_description(f'federated global epoch {epoch} '
         #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
         #                            f'val set loss {val_loss} val set acc {val_acc}')
-
+        percentiles_accs_str = ''
         if not Config.USE_GP:
             loss_str = f'federated global epoch {epoch} train_loss {epoch_train_loss} val set loss {val_loss} std {val_loss_std}'
             acc_str = f' train_acc {epoch_train_acc} val set acc {val_acc} std {val_acc_std}'
         else:
             loss_str = f'federated global epoch {epoch} val set loss {val_loss} std {val_loss_std}'
             acc_str = f' val set acc {val_acc} std {val_acc_std}'
+            percentiles_accs_str = f' val_10th_percentile {val_acc_10th_percentile}' \
+                                   f' val_50th_percentile {val_acc_50th_percentile}' \
+                                   f' val_90th_percentile {val_acc_90th_percentile}'
 
-        output_fn(loss_str if Config.TOY_STORY else loss_str + acc_str)
+        output_fn(loss_str if Config.TOY_STORY else loss_str + acc_str + percentiles_accs_str)
 
         # logging.debug(acc_per_cls_string(user_accuracies_dict=val_accs, user_list=validation_user_list))
 
@@ -279,7 +292,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                         'epoch_validation_acc': val_acc,
                         'epoch_validation_loss_std': val_loss_std,
                         'epoch_validation_acc_std': val_acc_std,
-                        'best_epoch_validation_acc': best_epoch_validation_acc
+                        'best_epoch_validation_acc': best_epoch_validation_acc,
+                        'epoch_validation_10th_percentile': val_acc_10th_percentile,
+                        'epoch_validation_50th_percentile': val_acc_50th_percentile,
+                        'epoch_validation_90th_percentile': val_acc_90th_percentile
                         }
 
             if not Config.USE_GP:
@@ -293,13 +309,13 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
 
                 list08, list09 = [], []
-                for pca in gep.selected_pca_list:
+                for pca in gep.selected_pca_group_list:
                     cumsums = pca.explained_variance_ratio_.cumsum()
                     list08.append(len(cumsums[cumsums < 0.8]))
                     list09.append(len(cumsums[cumsums < 0.9]))
 
-                num_bases_0_8 = float(sum(list08))/float(len(list08))
-                num_bases_0_9 = float(sum(list09))/float(len(list09))
+                num_bases_0_8 = float(sum(list08)) / float(len(list08))
+                num_bases_0_9 = float(sum(list09)) / float(len(list09))
 
                 log_dict.update({'epoch_gep_avg_private_approx_error': private_errs.mean().item(),
                                  'epoch_gep_std_private_approx_error': private_errs.std().item(),
@@ -343,15 +359,25 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 test_acc += acc / len(test_user_list)
                 test_accuracies[u] = acc
 
+        test_ordered_accs = [test_accuracies[u] for u in sorted(test_accuracies)]
+        test_acc_10th_percentile = np.percentile(test_ordered_accs, 10)
+        test_acc_50th_percentile = np.percentile(test_ordered_accs, 50)
+        test_acc_90th_percentile = np.percentile(test_ordered_accs, 90)
+
         if Config.WRITE_TO_WANDB:
-            wandb.log({'test_acc':test_acc})
-            new_wandb_row = pd.DataFrame({**{k:v for (k,v) in wandb.config.items()
-                                             if k not in ['app_config_dict', 'sweep_id']},
-                                          **{'best_epoch_validation_acc': best_epoch_validation_acc,
-                                             'test_acc': test_acc}}, index=[0])
-            sweep_id = wandb.config["sweep_id"]
-            sweep_csv_path = f'{Config.SWEEP_RESULTS_DIR}/{sweep_id}.csv'
-            new_wandb_row.to_csv(sweep_csv_path, mode='a', index=False, header=True)
+            wandb.log({'test_acc': test_acc, 'test_acc_10th_percentile': test_acc_10th_percentile,
+                                             'test_acc_50th_percentile': test_acc_50th_percentile,
+                                             'test_acc_90th_percentile': test_acc_90th_percentile})
+            # new_wandb_row = pd.DataFrame({**{k: v for (k, v) in wandb.config.items()
+            #                                  if k not in ['app_config_dict', 'sweep_id']},
+            #                               **{'best_epoch_validation_acc': best_epoch_validation_acc,
+            #                                  'test_acc_10th_percentile': test_acc_10th_percentile,
+            #                                  'test_acc_50th_percentile': test_acc_50th_percentile,
+            #                                  'test_acc_90th_percentile': test_acc_90th_percentile,
+            #                                  'test_acc': test_acc}}, index=[0])
+            # sweep_id = wandb.config["sweep_id"]
+            # sweep_csv_path = f'{Config.SWEEP_RESULTS_DIR}/{sweep_id}.csv'
+            # new_wandb_row.to_csv(sweep_csv_path, mode='a', index=False, header=True)
         # output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
         if Config.USE_GEP:
             output_fn(accountant_params_string())
