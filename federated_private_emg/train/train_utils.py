@@ -148,11 +148,11 @@ def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
             batch = (t.to(device) for t in batch)
             emg, labels = batch
 
-            # Crop 4 Toy testng
-            m,n = emg.shape[2:]
-            top = random.randint(0,m-3) # torch.randint(low=0, high=m-9, size=(emg.shape[0],))
-            left = random.randint(0,n-3) # torch.randint(low=0, high=n-9, size=(emg.shape[0],))
-            emg = torch.mean(emg, dim=1, keepdim=True)[:,:,top:top+3, left:left+3]
+            # # Crop 4 Toy testng
+            # m,n = emg.shape[2:]
+            # top = random.randint(0,m-3) # torch.randint(low=0, high=m-9, size=(emg.shape[0],))
+            # left = random.randint(0,n-3) # torch.randint(low=0, high=n-9, size=(emg.shape[0],))
+            # emg = torch.mean(emg, dim=1, keepdim=True)[:,:,top:top+3, left:left+3]
 
             labels = labels if Config.TOY_STORY or Config.CIFAR_DATA else labels_to_consecutive(labels).long().squeeze()
 
@@ -430,11 +430,11 @@ def run_single_epoch(model, loader, criterion,
         batch = (t.to(device) for t in batch)
         inputs, labels = batch
 
-        # Crop 4 Toy testng
-        m, n = inputs.shape[2:]
-        top = random.randint(0, m - 3)  # torch.randint(low=0, high=m-9, size=(inputs.shape[0],))
-        left = random.randint(0, n - 3)  # torch.randint(low=0, high=n-9, size=(inputs.shape[0],))
-        inputs = torch.mean(inputs, dim=1, keepdim=True)[:, :, top:top + 3, left:left + 3]
+        # # Crop 4 Toy testng
+        # m, n = inputs.shape[2:]
+        # top = random.randint(0, m - 3)  # torch.randint(low=0, high=m-9, size=(inputs.shape[0],))
+        # left = random.randint(0, n - 3)  # torch.randint(low=0, high=n-9, size=(inputs.shape[0],))
+        # inputs = torch.mean(inputs, dim=1, keepdim=True)[:, :, top:top + 3, left:left + 3]
 
         labels = labels if Config.TOY_STORY or Config.CIFAR_DATA else labels_to_consecutive(labels).squeeze()
 

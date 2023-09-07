@@ -308,14 +308,16 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 private_errs = torch.tensor(list(gep.approx_error.values()))
                 private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
 
-                list08, list09 = [], []
+                list08, list09, list095 = [], [], []
                 for pca in gep.selected_pca_group_list:
                     cumsums = pca.explained_variance_ratio_.cumsum()
                     list08.append(len(cumsums[cumsums < 0.8]))
                     list09.append(len(cumsums[cumsums < 0.9]))
+                    list095.append(len(cumsums[cumsums < 0.95]))
 
                 num_bases_0_8 = float(sum(list08)) / float(len(list08))
                 num_bases_0_9 = float(sum(list09)) / float(len(list09))
+                num_bases_0_95 = float(sum(list095)) / float(len(list095))
 
                 log_dict.update({'epoch_gep_avg_private_approx_error': private_errs.mean().item(),
                                  'epoch_gep_std_private_approx_error': private_errs.std().item(),
@@ -324,8 +326,10 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                  'epoch_num_bases_0_8': num_bases_0_8,
                                  'epoch_num_bases_0_9': num_bases_0_9
                                  })
+                print('epoch_num_bases_0_8', num_bases_0_8, 'epoch_num_bases_0_9', num_bases_0_9,  'epoch_num_bases_0_95', num_bases_0_95)
 
             wandb.log(log_dict)
+
 
         if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')

@@ -89,8 +89,8 @@ def model3d():
 def simple_mlp_cls():
     model = torch.nn.Sequential(
         torch.nn.Flatten(start_dim=1, end_dim=-1),
-        torch.nn.Linear(in_features=3 * 3 * 1, out_features=Config.HIDDEN_DIM, bias=True),
-        # torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
+        # torch.nn.Linear(in_features=3 * 3 * 1, out_features=10, bias=True),
+        torch.nn.Linear(in_features=32 * 32 * 3, out_features=Config.HIDDEN_DIM, bias=True),
         torch.nn.ReLU(),
         torch.nn.Linear(in_features=Config.HIDDEN_DIM, out_features=10, bias=True),
         torch.nn.Softmax(dim=-1))
