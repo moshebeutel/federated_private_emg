@@ -309,7 +309,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
 
                 list08, list09, list095 = [], [], []
-                for pca in gep.selected_pca_group_list:
+                for pca in gep.selected_pca_list:
                     cumsums = pca.explained_variance_ratio_.cumsum()
                     list08.append(len(cumsums[cumsums < 0.8]))
                     list09.append(len(cumsums[cumsums < 0.9]))

@@ -3,7 +3,7 @@ torch
 pandas
 # pytable
 wandb
-setuptools==61.0
+setuptools
 tqdm
 torchvision
 scikit-learn

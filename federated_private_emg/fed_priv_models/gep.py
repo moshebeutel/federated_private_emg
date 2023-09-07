@@ -122,14 +122,16 @@ class GEP(nn.Module):
         self.approx_error = {}
         self.approx_error_pca = {}
         self.base_history = Config.GEP_HISTORY_GRADS
+        self.max_grads = self.base_history * Config.NUM_CLIENTS_PUBLIC
         # self.selected_bases_list = [torch.empty(size=(num_bases,)) for _ in range(Config.GEP_NUM_GROUPS)]
         # self.selected_bases_list_history_list = [[] for _ in range(Config.GEP_NUM_GROUPS)]
-        self.selected_pca_group_list = [None for _ in range(Config.GEP_NUM_GROUPS)]
-        self.selected_pca_history_list_group_list = [[] for _ in range(Config.GEP_NUM_GROUPS)]
+        self.selected_pca_list = [None for _ in range(Config.GEP_NUM_GROUPS)]
+        # self.selected_pca_history_list_group_list = [[] for _ in range(Config.GEP_NUM_GROUPS)]
+        self.history_anchor_grads = None
 
     def get_approx_grad(self, embedding):
         bases_list, num_bases_list, num_param_list = (self.selected_bases_list if not Config.GEP_USE_PCA else
-                                                      self.selected_pca_group_list, self.num_bases_list,
+                                                      self.selected_pca_list, self.num_bases_list,
                                                       self.num_param_list)
         grad_list = []
         offset = 0
@@ -179,9 +181,17 @@ class GEP(nn.Module):
 
         return flatten_tensor(cur_batch_grad_list)
 
+    def append_current_anchor_grads_keep_history_size(self, current_anchor_grads):
+        self.history_anchor_grads = torch.cat([self.history_anchor_grads, current_anchor_grads]) \
+            if self.history_anchor_grads is not None else current_anchor_grads
+        if self.history_anchor_grads.shape[0] > self.max_grads:
+            self.history_anchor_grads = self.history_anchor_grads[-self.max_grads:, :]
+
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
-        anchor_grads = self.get_anchor_gradients(net, loss_func)  # \
+        current_anchor_grads = self.get_anchor_gradients(net, loss_func)
+        self.append_current_anchor_grads_keep_history_size(current_anchor_grads=current_anchor_grads)
+        anchor_grads = self.history_anchor_grads
 
         with (torch.no_grad()):
             num_param_list = self.num_param_list
@@ -200,8 +210,6 @@ class GEP(nn.Module):
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
                 pub_grad = anchor_grads[:, offset:offset + num_param]
-                if self.selected_pca_group_list[i] is not None:
-                    pub_grad = torch.cat([self.selected_pca_group_list[i], pub_grad])
 
                 offset += num_param
 
@@ -213,21 +221,21 @@ class GEP(nn.Module):
                 num_bases_list[i] = num_bases
                 # selected_bases_list.append(selected_bases.T.to(device))
                 selected_pca_list.append(torch.from_numpy(pca.components_).to(device))
-                # self.selected_pca_group_list[i] = pca
+                # self.selected_pca_list[i] = pca
                 del pub_grad, pub_error
 
             # if Config.GEP_HISTORY_GRADS > 0:
-            for i in range(len(num_param_list)):
-                # self.selected_bases_list[i] = \
-                # self.update_bases_list_using_history(curr_selected_bases=selected_bases_list[i],
-                #                                      history_list=self.selected_bases_list_history_list[i])
-
-                self.selected_pca_group_list[i] = \
-                    self.update_bases_list_using_history(curr_selected_bases=selected_pca_list[i],
-                                                         history_list=self.selected_pca_history_list_group_list[i])
-
-                num_bases_list[i] *= len(self.selected_pca_history_list_group_list[i])
-
+            # for i in range(len(num_param_list)):
+            #     # self.selected_bases_list[i] = \
+            #     # self.update_bases_list_using_history(curr_selected_bases=selected_bases_list[i],
+            #     #                                      history_list=self.selected_bases_list_history_list[i])
+            #
+            #     self.selected_pca_list[i] = \
+            #         self.update_bases_list_using_history(curr_selected_bases=selected_pca_list[i],
+            #                                              history_list=self.selected_pca_history_list_group_list[i])
+            #
+            #     num_bases_list[i] *= len(self.selected_pca_history_list_group_list[i])
+            self.selected_pca_list = selected_pca_list
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
             del pub_errs, num_bases_list
@@ -236,12 +244,12 @@ class GEP(nn.Module):
         del anchor_grads
         gc.collect()
 
-    def update_bases_list_using_history(self, curr_selected_bases, history_list):
-        min_shape = curr_selected_bases.shape
-        history_list.append(curr_selected_bases)
-        if len(history_list) > self.base_history:
-            history_list = history_list[1:]
-        return torch.cat(history_list)
+    # def update_bases_list_using_history(self, curr_selected_bases, history_list):
+    #     min_shape = curr_selected_bases.shape
+    #     history_list.append(curr_selected_bases)
+    #     if len(history_list) > self.base_history:
+    #         history_list = history_list[1:]
+    #     return torch.cat(history_list)
 
     def forward(self, target_grad, logging=True):
         with torch.no_grad():
@@ -257,7 +265,7 @@ class GEP(nn.Module):
                 grad = target_grad[:, offset:offset + num_param]
 
                 # selected_bases = self.selected_bases_list[i].squeeze().T
-                selected_pca = self.selected_pca_group_list[i].squeeze()
+                selected_pca = self.selected_pca_list[i].squeeze()
                 # print(selected_bases.shape)
                 selected_pca_components_tensor = selected_pca.T if Config.GEP_HISTORY_GRADS > 0 else torch.from_numpy(
                     selected_pca.components_.T)
