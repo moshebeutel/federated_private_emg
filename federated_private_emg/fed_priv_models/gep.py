@@ -66,11 +66,8 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_k = pub_grad.shape[0]
     num_p = pub_grad.shape[1]
 
-    print('$$$$$')
-    print('k, p, num_bases', num_k, num_p, num_bases)
     num_bases = min(num_bases, min(num_p, num_k))
-    print('num_bases', num_bases)
-    print('$$$$$')
+
     # L = torch.normal(0, 1.0, size=(pub_grad.shape[1], num_bases), device=pub_grad.device)
     # for i in range(power_iter):
     #     # print('get bases: iter', i)
@@ -82,12 +79,6 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
 
     pca = PCA(n_components=num_bases)
     pca.fit(pub_grad.detach().numpy())
-    # print(pca.explained_variance_)
-    # print(pca.explained_variance_ratio_)
-    # print(pca.explained_variance_.sum())
-    # print(pca.explained_variance_.cumsum())
-    # print(pca.explained_variance_ratio_.sum())
-    # print(pca.explained_variance_ratio_.cumsum())
 
     cumsums = pca.explained_variance_ratio_.cumsum()
 
@@ -108,6 +99,59 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     # return L, num_bases, error_rate, pca
 
 
+def log_embedding_norms(concatenated_embedding_pca, residual_gradients_pca):
+    norms_pca = torch.norm(concatenated_embedding_pca, dim=1)
+    mean_embedding = torch.mean(norms_pca).item()
+    max_embedding = torch.max(norms_pca).item()
+    median_embedding = torch.median(norms_pca).item()
+    norms_pca = torch.norm(residual_gradients_pca, dim=1)
+    mean_residual = torch.mean(norms_pca).item()
+    max_residual = torch.max(norms_pca).item()
+    median_residual = torch.median(norms_pca).item()
+    print('*** max norm ***')
+    print('residual', max_residual)
+    print('embedding', max_embedding)
+    print('ratio', max_residual / max_embedding)
+    print('*** mean norm ***')
+    print('residual', mean_residual)
+    print('embedding', mean_embedding)
+    print('ratio', mean_residual / mean_embedding)
+    print('*** median norm ***')
+    print('residual', median_residual)
+    print('embedding', median_embedding)
+    print('ratio', median_residual / median_embedding)
+    print('*** shape ***')
+    print('residual', residual_gradients_pca.shape)
+    print('embedding', concatenated_embedding_pca.shape)
+
+
+def get_approx_grad(embedding, bases_list, num_bases_list):
+    grad_list = []
+    offset = 0
+    if len(embedding.shape) > 1:
+        bs = embedding.shape[0]
+    else:
+        bs = 1
+    embedding = embedding.view(bs, -1)
+
+    for i, bases in enumerate(bases_list):
+        num_bases = num_bases_list[i]
+
+        bases_components = bases.squeeze() if Config.GEP_USE_PCA else bases.T
+
+        grad = torch.matmul(embedding[:, offset:offset + num_bases].view(bs, -1), bases_components)
+
+        if bs > 1:
+            grad_list.append(grad.view(bs, -1))
+        else:
+            grad_list.append(grad.view(-1))
+        offset += num_bases
+    if bs > 1:
+        return torch.cat(grad_list, dim=1)
+    else:
+        return torch.cat(grad_list)
+
+
 class GEP(nn.Module):
 
     def __init__(self, num_bases, batch_size, clip0=1, clip1=1, power_iter=1):
@@ -123,62 +167,20 @@ class GEP(nn.Module):
         self.approx_error_pca = {}
         self.base_history = Config.GEP_HISTORY_GRADS
         self.max_grads = self.base_history * Config.NUM_CLIENTS_PUBLIC
-        # self.selected_bases_list = [torch.empty(size=(num_bases,)) for _ in range(Config.GEP_NUM_GROUPS)]
-        # self.selected_bases_list_history_list = [[] for _ in range(Config.GEP_NUM_GROUPS)]
-        self.selected_pca_list = [None for _ in range(Config.GEP_NUM_GROUPS)]
-        # self.selected_pca_history_list_group_list = [[] for _ in range(Config.GEP_NUM_GROUPS)]
+        self._selected_bases_list = None
+        self._selected_pca_list = [None for _ in range(Config.GEP_NUM_GROUPS)]
         self.history_anchor_grads = None
 
-    def get_approx_grad(self, embedding):
-        bases_list, num_bases_list, num_param_list = (self.selected_bases_list if not Config.GEP_USE_PCA else
-                                                      self.selected_pca_list, self.num_bases_list,
-                                                      self.num_param_list)
-        grad_list = []
-        offset = 0
-        if len(embedding.shape) > 1:
-            bs = embedding.shape[0]
-        else:
-            bs = 1
-        embedding = embedding.view(bs, -1)
-
-        for i, bases in enumerate(bases_list):
-            num_bases = num_bases_list[i]
-
-            bases_components = bases.squeeze() if Config.GEP_USE_PCA else bases.T
-
-            grad = torch.matmul(embedding[:, offset:offset + num_bases].view(bs, -1), bases_components)
-
-            if bs > 1:
-                grad_list.append(grad.view(bs, -1))
-            else:
-                grad_list.append(grad.view(-1))
-            offset += num_bases
-        if bs > 1:
-            return torch.cat(grad_list, dim=1)
-        else:
-            return torch.cat(grad_list)
+    @property
+    def selected_bases_list(self):
+        return self._selected_pca_list if Config.GEP_USE_PCA else self._selected_bases_list
 
     def get_anchor_gradients(self, net, loss_func):
-        # print('get_anchor_gradient')
-        # device = next(net.parameters()).device
-        # for inputs, targets in self.loader:
-        #     inputs, targets = inputs.to(device), targets.to(device)
-        #     outputs = net(inputs)
-        #     loss = loss_func(outputs.cpu(), targets.cpu())
-        #     with backpack(BatchGrad()):
-        #         # print('get_anchor_gradients. before loss.backward()')
-        #         loss.backward()
-        #     del loss, outputs
         cur_batch_grad_list = []
         for p in net.parameters():
-            # print('get_anchor_gradients. p.grad_batch.shape', p.grad_batch.shape)
             if hasattr(p, 'grad_batch'):
                 grad_batch = p.grad_batch[:len(self.public_users)]
                 cur_batch_grad_list.append(grad_batch.reshape(grad_batch.shape[0], -1))
-                # del p.grad_batch
-
-        gc.collect()
-
         return flatten_tensor(cur_batch_grad_list)
 
     def append_current_anchor_grads_keep_history_size(self, current_anchor_grads):
@@ -221,21 +223,10 @@ class GEP(nn.Module):
                 num_bases_list[i] = num_bases
                 # selected_bases_list.append(selected_bases.T.to(device))
                 selected_pca_list.append(torch.from_numpy(pca.components_).to(device))
-                # self.selected_pca_list[i] = pca
                 del pub_grad, pub_error
 
-            # if Config.GEP_HISTORY_GRADS > 0:
-            # for i in range(len(num_param_list)):
-            #     # self.selected_bases_list[i] = \
-            #     # self.update_bases_list_using_history(curr_selected_bases=selected_bases_list[i],
-            #     #                                      history_list=self.selected_bases_list_history_list[i])
-            #
-            #     self.selected_pca_list[i] = \
-            #         self.update_bases_list_using_history(curr_selected_bases=selected_pca_list[i],
-            #                                              history_list=self.selected_pca_history_list_group_list[i])
-            #
-            #     num_bases_list[i] *= len(self.selected_pca_history_list_group_list[i])
-            self.selected_pca_list = selected_pca_list
+            # self.selected_bases_list = selected_bases_list
+            self._selected_pca_list = selected_pca_list
             self.num_bases_list = num_bases_list
             self.approx_errors = pub_errs
             del pub_errs, num_bases_list
@@ -243,13 +234,6 @@ class GEP(nn.Module):
             gc.collect()
         del anchor_grads
         gc.collect()
-
-    # def update_bases_list_using_history(self, curr_selected_bases, history_list):
-    #     min_shape = curr_selected_bases.shape
-    #     history_list.append(curr_selected_bases)
-    #     if len(history_list) > self.base_history:
-    #         history_list = history_list[1:]
-    #     return torch.cat(history_list)
 
     def forward(self, target_grad, logging=True):
         with torch.no_grad():
@@ -265,17 +249,13 @@ class GEP(nn.Module):
                 grad = target_grad[:, offset:offset + num_param]
 
                 # selected_bases = self.selected_bases_list[i].squeeze().T
-                selected_pca = self.selected_pca_list[i].squeeze()
-                # print(selected_bases.shape)
-                selected_pca_components_tensor = selected_pca.T if Config.GEP_HISTORY_GRADS > 0 else torch.from_numpy(
-                    selected_pca.components_.T)
+                selected_pca = self._selected_pca_list[i].squeeze().T
 
                 # embedding = torch.matmul(grad, selected_bases)
-                embedding_by_pca = torch.matmul(grad, selected_pca_components_tensor)
-                # bases_tensor = torch.cat([selected_bases])
-                # bases_reconstruction_error = check_approx_error(bases_tensor, grad)
+                embedding_by_pca = torch.matmul(grad, selected_pca)
 
-                pca_reconstruction_error = check_approx_error(selected_pca_components_tensor, grad)
+                # bases_reconstruction_error = check_approx_error(selected_bases, grad)
+                pca_reconstruction_error = check_approx_error(selected_pca, grad)
 
                 # reconstruction_errs.append(bases_reconstruction_error)
                 pca_reconstruction_errs.append(pca_reconstruction_error)
@@ -283,7 +263,7 @@ class GEP(nn.Module):
                 if logging:
                     # cur_approx = torch.matmul(torch.mean(embedding, dim=0).view(1, -1), selected_bases.T).view(-1)
                     cur_approx_pca = torch.matmul(torch.mean(embedding_by_pca, dim=0).view(1, -1),
-                                                  selected_pca_components_tensor.T).view(-1)
+                                                  selected_pca.T).view(-1)
                     cur_target = torch.mean(grad, dim=0)
                     cur_target_sqr_norm = torch.sum(torch.square(cur_target))
                     # cur_error = torch.sum(torch.square(cur_approx - cur_target)) / cur_target_sqr_norm
@@ -328,8 +308,10 @@ class GEP(nn.Module):
             del clipped_embedding_pca
             # del clipped_embedding, clipped_embedding_pca
 
-            # no_reduction_approx = self.get_approx_grad(concatenated_embedding)
-            no_reduction_approx_pca = self.get_approx_grad(concatenated_embedding_pca)
+            # no_reduction_approx = self.get_approx_grad(concatenated_embedding, bases_list=self.selected_bases_list,
+            #                                                       num_bases_list=self.num_bases_list)
+            no_reduction_approx_pca = get_approx_grad(concatenated_embedding_pca, bases_list=self._selected_pca_list,
+                                                      num_bases_list=self.num_bases_list)
             if Config.GEP_HISTORY_GRADS > 0:
                 # min_shape = min(target_grad.shape[1], no_reduction_approx.shape[1])
                 min_shape = min(target_grad.shape[1], no_reduction_approx_pca.shape[1])
@@ -340,32 +322,7 @@ class GEP(nn.Module):
                 residual_gradients_pca = target_grad - no_reduction_approx_pca
 
             if logging:
-                # norms = torch.norm(clipped_residual_gradients, dim=1)
-                norms_pca = torch.norm(concatenated_embedding_pca, dim=1)
-                mean_embedding = torch.mean(norms_pca).item()
-                max_embedding = torch.max(norms_pca).item()
-                median_embedding = torch.median(norms_pca).item()
-
-                norms_pca = torch.norm(residual_gradients_pca, dim=1)
-                mean_residual = torch.mean(norms_pca).item()
-                max_residual = torch.max(norms_pca).item()
-                median_residual = torch.median(norms_pca).item()
-
-                print('*** max norm ***')
-                print('residual', max_residual)
-                print('embedding', max_embedding)
-                print('ratio', max_residual / max_embedding)
-                print('*** mean norm ***')
-                print('residual', mean_residual)
-                print('embedding', mean_embedding)
-                print('ratio', mean_residual / mean_embedding)
-                print('*** median norm ***')
-                print('residual', median_residual)
-                print('embedding', median_embedding)
-                print('ratio', median_residual / median_embedding)
-                print('*** shape ***')
-                print('residual', residual_gradients_pca.shape)
-                print('embedding', concatenated_embedding_pca.shape)
+                log_embedding_norms(concatenated_embedding_pca, residual_gradients_pca)
 
             # clip_column(residual_gradients, clip=self.clip1)  # inplace clipping to save memory
             clip_column(residual_gradients_pca, clip=self.clip1)  # inplace clipping to save memory
@@ -382,8 +339,11 @@ class GEP(nn.Module):
             # avg_clipped_residual_gradients = torch.sum(clipped_residual_gradients, dim=0) / self.batch_size
             avg_clipped_residual_gradients_pca = torch.sum(clipped_residual_gradients_pca, dim=0) / self.batch_size
             avg_target_grad = torch.sum(target_grad, dim=0) / self.batch_size
+            del no_reduction_approx_pca, residual_gradients_pca, clipped_residual_gradients_pca
             # del no_reduction_approx, residual_gradients, clipped_residual_gradients, no_reduction_approx_pca, \
             #     residual_gradients_pca, clipped_residual_gradients_pca
+
+            gc.collect()
 
             if Config.GEP_USE_PCA:
                 return avg_clipped_embedding_pca.view(-1), avg_clipped_residual_gradients_pca.view(

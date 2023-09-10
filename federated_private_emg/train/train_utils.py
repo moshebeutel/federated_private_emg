@@ -18,7 +18,7 @@ from common.utils import labels_to_consecutive, flatten_tensor
 from differential_privacy.params import DpParams
 from differential_privacy.utils import per_sample_gradient_fwd_bwd
 from differential_privacy.accountant_utils import add_dp_noise
-from fed_priv_models.gep import GEP
+from fed_priv_models.gep import GEP, get_approx_grad
 from fed_priv_models.pFedGP.utils import build_tree
 from train.params import TrainParams
 from train.train_objects import TrainObjects
@@ -61,7 +61,7 @@ def sgd_dp_batch(model, batchsize):
 
         # Add noise to mean of private grads
         noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C,
-                             size=mean_grad_private_clipped.size(), device=p.device) / batchsize if Config.ADD_DP_NOISE\
+                             size=mean_grad_private_clipped.size(), device=p.device) / batchsize if Config.ADD_DP_NOISE \
             else torch.zeros_like(mean_grad_private_clipped)
 
         # print('clip', Config.DP_C)
@@ -69,7 +69,6 @@ def sgd_dp_batch(model, batchsize):
         # print('noise', torch.linalg.norm(noise), torch.abs(noise).max())
         # print('mean_grad_private_clipped',
         #       torch.linalg.norm(mean_grad_private_clipped), torch.abs(mean_grad_private_clipped).max())
-
 
         mean_grad_private_clipped_and_noised = mean_grad_private_clipped + noise
 
@@ -349,7 +348,8 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
         residual_grad += grad_noise
         del theta_noise, grad_noise
 
-    noisy_grad = gep.get_approx_grad(clipped_theta)
+    noisy_grad = get_approx_grad(clipped_theta, bases_list=gep.selected_bases_list,
+                                 num_bases_list=gep.num_bases_list)
     if Config.GEP_USE_RESIDUAL:
         noisy_grad += residual_grad
     # print('noisy_grad', noisy_grad, torch.linalg.norm(noisy_grad))

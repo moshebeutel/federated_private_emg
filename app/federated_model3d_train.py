@@ -1,8 +1,6 @@
 import logging
 from functools import partial
-
 import torch.nn
-
 import wandb
 from common import utils
 from common.config import Config
@@ -40,45 +38,12 @@ def main():
         print('USERS_BIASES', {u: '%.3f' % b for u, b in USERS_BIASES.items()})
 
         print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
-
-    # q = '%.3f' % (float(Config.NUM_CLIENT_AGG) / float(len(train_user_list)))
-
-    # if Config.USE_GEP:
-    #     sigma0 = '%.3f' % Config.GEP_SIGMA0
-    #     sigma1 = '%.3f' % Config.GEP_SIGMA1
-    #     clip0 = '%.3f' % Config.GEP_CLIP0
-    #     clip1 = '%.3f' % Config.GEP_CLIP1
-    #     # exp_name = f'CIFAR10 GEP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-    #     exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} ' \
-    #                f'sigma=[{sigma0},{sigma1}] public users {len(utils.public_users)}' \
-    #                f' residual gradients {Config.GEP_USE_RESIDUAL}'
-    #     # exp_name = f'CIFAR10 GEP clip=[{clip0},{clip1}] no noise 50 train users {len(utils.public_users)} public residual gradients {Config.GEP_USE_RESIDUAL} AGG {Config.NUM_CLIENT_AGG} {Config.CIFAR10_CLASSES_PER_USER} classes each user'
-    #     # exp_name = f'High Dim GEP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma=[{sigma0},{sigma1}] clip=[{clip0},{clip1}]'
-    # elif Config.USE_SGD_DP:
-    #     dp_sigma = '%.3f' % Config.DP_SIGMA
-    #     dp_c = '%.3f' % Config.DP_C
-    #     exp_name = f'EMG SGD_DP eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
-    #     # exp_name = f'High Dim SGD_DP data scale={Config.DATA_SCALE} eps={Config.DP_EPSILON} delta={Config.DP_DELTA} q={q} sigma={dp_sigma} C={dp_c}'
-    # exp_name = utils.get_exp_name('TOY STORY Federated')
-    # logger = utils.config_logger(f'{exp_name}_logger',
-    #                              level=logging.INFO, log_folder='../log/')
-    # logger.info(exp_name)
-    # update_accountant_params(output_fn=logging.info)
-
     update_accountant_params()
     exp_name = get_exp_name()
 
     if Config.WRITE_TO_WANDB:
         wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=exp_name)
         config_dict = Config.to_dict()
-        # users = train_user_list + validation_user_list + test_user_list
-        # for u in users:
-        #     config_dict[f'user_{u}_bias'] = USERS_BIASES[u]
-        # for u in users:
-        # #     config_dict[f'user_{u}_variance'] = USERS_VARIANCES[u]
-        # config_dict.update({'train_user_list': train_user_list,
-        #                     'validation_user_list': validation_user_list,
-        #                     'test_user_list': test_user_list})
 
         wandb.config.update(config_dict)
 
