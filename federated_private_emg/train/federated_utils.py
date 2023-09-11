@@ -2,6 +2,8 @@ import gc
 import logging
 import os
 import random
+import sys
+
 import torch
 import wandb
 from common import utils
@@ -211,7 +213,6 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                          train_user_list=train_user_list,
                                          train_params=internal_train_params,
                                          gep=gep, GPs=GPs, output_fn=lambda s: None)  # output_fn)
-
         model.eval()
         val_losses, val_accs = [], {}
         if Config.USE_GP:
@@ -304,32 +305,35 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
             if Config.USE_GEP:
                 errs = torch.tensor(gep.approx_errors)
-                log_dict.update({'epoch_gep_avg_approx_error': errs.mean(), 'epoch_gep_std_approx_error': errs.std()})
-                private_errs = torch.tensor(list(gep.approx_error.values()))
+                log_dict.update({
+                    'PUBLIC_approx_error': errs.mean(),
+                    # 'epoch_gep_std_approx_error': errs.std()
+                })
+                # private_errs = torch.tensor(list(gep.approx_error.values()))
                 private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
 
-                list08, list09, list095 = [], [], []
-                for pca in gep._selected_pca_list:
-                    cumsums = pca.explained_variance_ratio_.cumsum()
-                    list08.append(len(cumsums[cumsums < 0.8]))
-                    list09.append(len(cumsums[cumsums < 0.9]))
-                    list095.append(len(cumsums[cumsums < 0.95]))
+                # list08, list09, list095 = [], [], []
+                # for pca in gep._selected_pca_list:
+                #     cumsums = pca.explained_variance_ratio_.cumsum()
+                #     list08.append(len(cumsums[cumsums < 0.8]))
+                #     list09.append(len(cumsums[cumsums < 0.9]))
+                #     list095.append(len(cumsums[cumsums < 0.95]))
+                #
+                # num_bases_0_8 = float(sum(list08)) / float(len(list08))
+                # num_bases_0_9 = float(sum(list09)) / float(len(list09))
+                # num_bases_0_95 = float(sum(list095)) / float(len(list095))
 
-                num_bases_0_8 = float(sum(list08)) / float(len(list08))
-                num_bases_0_9 = float(sum(list09)) / float(len(list09))
-                num_bases_0_95 = float(sum(list095)) / float(len(list095))
-
-                log_dict.update({'epoch_gep_avg_private_approx_error': private_errs.mean().item(),
-                                 'epoch_gep_std_private_approx_error': private_errs.std().item(),
-                                 'epoch_gep_avg_private_approx_error_pca': private_errs_pca.mean().item(),
-                                 'epoch_gep_std_private_approx_error_pca': private_errs_pca.std().item(),
-                                 'epoch_num_bases_0_8': num_bases_0_8,
-                                 'epoch_num_bases_0_9': num_bases_0_9
-                                 })
-                print('epoch_num_bases_0_8', num_bases_0_8, 'epoch_num_bases_0_9', num_bases_0_9,  'epoch_num_bases_0_95', num_bases_0_95)
+                log_dict.update({
+                    # 'epoch_gep_avg_private_approx_error': private_errs.mean().item(),
+                    # 'epoch_gep_std_private_approx_error': private_errs.std().item(),
+                    'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
+                    # 'epoch_gep_std_private_approx_error_pca': private_errs_pca.std().item(),
+                    # 'epoch_num_bases_0_8': num_bases_0_8,
+                    # 'epoch_num_bases_0_9': num_bases_0_9
+                })
+                # print('epoch_num_bases_0_8', num_bases_0_8, 'epoch_num_bases_0_9', num_bases_0_9,  'epoch_num_bases_0_95', num_bases_0_95)
 
             wandb.log(log_dict)
-
 
         if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')
@@ -370,8 +374,8 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         if Config.WRITE_TO_WANDB:
             wandb.log({'test_acc': test_acc, 'test_acc_10th_percentile': test_acc_10th_percentile,
-                                             'test_acc_50th_percentile': test_acc_50th_percentile,
-                                             'test_acc_90th_percentile': test_acc_90th_percentile})
+                       'test_acc_50th_percentile': test_acc_50th_percentile,
+                       'test_acc_90th_percentile': test_acc_90th_percentile})
             # new_wandb_row = pd.DataFrame({**{k: v for (k, v) in wandb.config.items()
             #                                  if k not in ['app_config_dict', 'sweep_id']},
             #                               **{'best_epoch_validation_acc': best_epoch_validation_acc,

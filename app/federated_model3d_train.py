@@ -187,9 +187,10 @@ def sweep_train(sweep_id, config=None):
             Config.ADD_DP_NOISE = True
 
         Config.NUM_CLIENTS_PUBLIC = config.num_clients_public
-        Config.HIDDEN_DIM = config.hidden_dim
+        # Config.HIDDEN_DIM = config.hidden_dim
         Config.GEP_NUM_GROUPS = 1
-        Config.GEP_NUM_BASES = Config.NUM_CLIENTS_PUBLIC * Config.GEP_NUM_GROUPS
+        Config.GEP_HISTORY_GRADS = 100
+        Config.GEP_NUM_BASES = 95
         # Config.GEP_POWER_ITER = config.gep_power_iter
         # Config.GEP_USE_PCA = (config.use_pca == 1)
         Config.GEP_USE_PCA = 1
@@ -257,8 +258,8 @@ def run_sweep():
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
         'seed': {
-            'values': [10, 50]
-            # 'values': [10,30,50]
+            # 'values': [10]
+            'values': [20, 40, 60]
         },
         'epsilon': {
             'values': [1.0]
@@ -282,12 +283,12 @@ def run_sweep():
         #     'values': [1, 0]
         # },
         'num_clients_public': {
-            'values': [200]
+            'values': [20, 30, 40, 50]
             # 'values': [25, 50, 70, 100]
         },
-        'hidden_dim': {
-            'values': [15, 25, 30]
-        },
+        # 'hidden_dim': {
+        #     'values': [15, 25, 30]
+        # },
         # 'classes_each_user': {
         #     'values': [3]
         # },
@@ -315,5 +316,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    main()
-    # run_sweep()
+    # main()
+    run_sweep()

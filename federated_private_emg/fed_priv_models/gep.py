@@ -10,7 +10,7 @@ from backpack.extensions import BatchGrad
 
 from common.config import Config
 from common.utils import flatten_tensor
-
+from memory_profiler import profile
 
 @torch.jit.script
 def orthogonalize(matrix):
@@ -61,7 +61,7 @@ def check_approx_error(L, target):
     # print(f'inside check_approx_error error = {error.item()} target = {target.item()}')
     return error.item() / target.item()
 
-
+# @profile
 def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_k = pub_grad.shape[0]
     num_p = pub_grad.shape[1]
@@ -89,6 +89,8 @@ def get_bases(pub_grad, num_bases, power_iter=1, logging=False):
     num_bases_0_8 = len(cumsums[cumsums < 0.8])
     num_bases_0_9 = len(cumsums[cumsums < 0.9])
     num_bases_0_95 = len(cumsums[cumsums < 0.95])
+
+    del cumsums
 
     print('epoch_num_bases_0_8', num_bases_0_8,
           'epoch_num_bases_0_9', num_bases_0_9,
@@ -165,8 +167,7 @@ class GEP(nn.Module):
         self.batch_size = batch_size
         self.approx_error = {}
         self.approx_error_pca = {}
-        self.base_history = Config.GEP_HISTORY_GRADS
-        self.max_grads = self.base_history * Config.NUM_CLIENTS_PUBLIC
+        self.max_grads = Config.GEP_HISTORY_GRADS
         self._selected_bases_list = None
         self._selected_pca_list = [None for _ in range(Config.GEP_NUM_GROUPS)]
         self.history_anchor_grads = None
@@ -223,7 +224,7 @@ class GEP(nn.Module):
                 num_bases_list[i] = num_bases
                 # selected_bases_list.append(selected_bases.T.to(device))
                 selected_pca_list.append(torch.from_numpy(pca.components_).to(device))
-                del pub_grad, pub_error
+                del pub_grad, pub_error, pca
 
             # self.selected_bases_list = selected_bases_list
             self._selected_pca_list = selected_pca_list
@@ -231,10 +232,9 @@ class GEP(nn.Module):
             self.approx_errors = pub_errs
             del pub_errs, num_bases_list
             # del pub_errs, num_bases_list, selected_bases_list
-            gc.collect()
         del anchor_grads
         gc.collect()
-
+    # @profile
     def forward(self, target_grad, logging=True):
         with torch.no_grad():
             num_param_list = self.num_param_list

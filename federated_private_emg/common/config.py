@@ -35,7 +35,7 @@ class Config:
     EVAL_EVERY = 1
     TEST_AT_END = True
 
-    WRITE_TO_WANDB = False
+    WRITE_TO_WANDB = True
 
     # GP
     USE_GP = False
@@ -70,7 +70,7 @@ class Config:
     ADD_DP_NOISE = False
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 20, 10, 100
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 20, 10, 400
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -110,7 +110,7 @@ class Config:
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 1
     GEP_USE_RESIDUAL = False
-    GEP_HISTORY_GRADS = 50
+    GEP_HISTORY_GRADS = 5
     GEP_USE_PCA = 1
     GEP_NUM_BASES = 1000 # NUM_CLIENTS_TRAIN * GEP_NUM_GROUPS
 
