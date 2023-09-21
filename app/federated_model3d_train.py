@@ -159,7 +159,7 @@ def sweep_train(sweep_id, config=None):
         # if config.dp == 'NO_DP' and not config.epsilon == 8.0:
         #     return
 
-        # Config.USE_GP = (config.use_gp == 1)
+        Config.USE_GP = (config.use_gp == 1)
         Config.SEED = config.seed
         if config.dp == 'SGD_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
@@ -186,15 +186,16 @@ def sweep_train(sweep_id, config=None):
             Config.GEP_USE_RESIDUAL = False
             Config.ADD_DP_NOISE = True
 
+        Config.CLASSES_PER_USER = config.classes_each_user
         Config.NUM_CLIENTS_PUBLIC = config.num_clients_public
         # Config.HIDDEN_DIM = config.hidden_dim
         Config.GEP_NUM_GROUPS = 1
-        Config.GEP_HISTORY_GRADS = 100
-        Config.GEP_NUM_BASES = 95
+        Config.GEP_NUM_BASES = config.gep_num_bases
+        Config.GEP_HISTORY_GRADS = config.gep_num_bases + 5
         # Config.GEP_POWER_ITER = config.gep_power_iter
         # Config.GEP_USE_PCA = (config.use_pca == 1)
         Config.GEP_USE_PCA = 1
-        Config.ADD_DP_NOISE = False
+        Config.ADD_DP_NOISE = True
         Config.NUM_CLIENT_AGG = config.agg
 
         if "clip" not in config:
@@ -252,17 +253,20 @@ def run_sweep():
         # },
         'clip': {
             # 'values': [0.00001, 0.0001, 0.001]
-            'values': [0.00001]
+            # 'values': [0.00001]
+            'values': [0.0001]
         },
         # 'sigma': {
         #     'values': [1.2, 3.2, 9.6, 0.6, 1.6, 4.8]
         # },
         'seed': {
-            # 'values': [10]
-            'values': [20, 40, 60]
+            'values': [20]
+            # 'values': [20, 40, 60]
         },
         'epsilon': {
-            'values': [1.0]
+            # 'values': [1.0, 3.0, 8.0]
+            'values': [1e6]
+            # 'values': [1.0]
             # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
@@ -274,7 +278,7 @@ def run_sweep():
         'dp': {
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
-            'values': ['GEP_NO_RESIDUALS']
+            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
             # 'values': ['SGD_DP']
             # 'values': ['NO_DP']
 
@@ -283,24 +287,27 @@ def run_sweep():
         #     'values': [1, 0]
         # },
         'num_clients_public': {
-            'values': [20, 30, 40, 50]
+            'values': [20]
             # 'values': [25, 50, 70, 100]
         },
         # 'hidden_dim': {
         #     'values': [15, 25, 30]
         # },
-        # 'classes_each_user': {
-        #     'values': [3]
-        # },
+        'classes_each_user': {
+            # 'values': [2, 6, 10]
+            # 'values': [2, 6]
+            'values': [2, 6]
+        },
         # 'internal_epochs': {
         #     'values': [1, 5]
         # },
-        # 'use_gp': {
-        #     'values': [0, 1]
-        # },
-        # 'gep_num_bases': {
-        #     'values': [21, 30]
-        # },
+        'use_gp': {
+            # 'values': [1]
+            'values': [0, 1]
+        },
+        'gep_num_bases': {
+            'values': [155]
+        },
         #
         # 'gep_num_groups': {
         #     'values': [15, 20]
