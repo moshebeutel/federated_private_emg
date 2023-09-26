@@ -10,7 +10,7 @@ from backpack.extensions import BatchGrad
 
 from common.config import Config
 from common.utils import flatten_tensor
-from memory_profiler import profile
+# from memory_profiler import profile
 
 @torch.jit.script
 def orthogonalize(matrix):
@@ -189,6 +189,9 @@ class GEP(nn.Module):
             if self.history_anchor_grads is not None else current_anchor_grads
         if self.history_anchor_grads.shape[0] > self.max_grads:
             self.history_anchor_grads = self.history_anchor_grads[-self.max_grads:, :]
+        # print('*************************')
+        # print('len(self.history_anchor_grads)', len(self.history_anchor_grads))
+        # print('*************************')
 
     # @profile
     def get_anchor_space(self, net, loss_func, logging=False):
@@ -218,6 +221,7 @@ class GEP(nn.Module):
 
                 num_bases = num_bases_list[i]
 
+                print("PUBLIC GET BASES")
                 selected_bases, num_bases, pub_error, pca = get_bases(pub_grad, num_bases, self.power_iter, logging)
                 pub_errs.append(pub_error)
                 print('group wise approx PUBLIC  error pca: %.2f%%' % (100 * pub_error))
@@ -247,6 +251,10 @@ class GEP(nn.Module):
             pca_reconstruction_errs = []
             for i, num_param in enumerate(num_param_list):
                 grad = target_grad[:, offset:offset + num_param]
+
+                print('PRIVATE GET BASES')
+                get_bases(grad, 150, self.power_iter, logging)
+                print('AFTER PRIVATE GET BASES')
 
                 # selected_bases = self.selected_bases_list[i].squeeze().T
                 selected_pca = self._selected_pca_list[i].squeeze().T
@@ -321,8 +329,8 @@ class GEP(nn.Module):
                 # residual_gradients = target_grad - no_reduction_approx
                 residual_gradients_pca = target_grad - no_reduction_approx_pca
 
-            if logging:
-                log_embedding_norms(concatenated_embedding_pca, residual_gradients_pca)
+            # if logging:
+            #     log_embedding_norms(concatenated_embedding_pca, residual_gradients_pca)
 
             # clip_column(residual_gradients, clip=self.clip1)  # inplace clipping to save memory
             clip_column(residual_gradients_pca, clip=self.clip1)  # inplace clipping to save memory

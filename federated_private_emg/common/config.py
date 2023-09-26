@@ -16,7 +16,7 @@ class Config:
     USE_DROPOUT = False
     DEVICE = 'cpu'
     BATCH_SIZE = 512
-    NUM_EPOCHS = 100
+    NUM_EPOCHS = 2
     DETERMINISTIC_SEED = True
     SEED = 42 if DETERMINISTIC_SEED else int(datetime.now().timestamp())
 
@@ -70,7 +70,7 @@ class Config:
     ADD_DP_NOISE = True
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 20, 10, 400
+    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 150, 50, 400
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
@@ -110,9 +110,9 @@ class Config:
     GEP_POWER_ITER = 1
     GEP_NUM_GROUPS = 1
     GEP_USE_RESIDUAL = False
-    GEP_HISTORY_GRADS = 160
+    GEP_HISTORY_GRADS = 150
     GEP_USE_PCA = 1
-    GEP_NUM_BASES = 155 # NUM_CLIENTS_TRAIN * GEP_NUM_GROUPS
+    GEP_NUM_BASES = 150 # NUM_CLIENTS_TRAIN * GEP_NUM_GROUPS
 
     # DP_SGD
     DP_C = 0.0001  # sqrt(pow(GEP_CLIP0, 2.0) + pow(GEP_CLIP1, 2.0))

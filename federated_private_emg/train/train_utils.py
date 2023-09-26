@@ -335,14 +335,14 @@ def gep_batch(accumulated_grads, gep, model, batchsize):
                                   size=residual_grad.shape,
                                   device=residual_grad.device) / batchsize
 
-        print('clip0', Config.GEP_CLIP0)
-        print('clip1', Config.GEP_CLIP1)
-        print('sigma0', Config.GEP_SIGMA0)
-        print('sigma1', Config.GEP_SIGMA1)
-        print('theta_noise', torch.linalg.norm(theta_noise), torch.abs(theta_noise).max())
-        print('grad_noise', torch.linalg.norm(grad_noise), torch.abs(grad_noise).max())
-        print('clipped_theta', torch.linalg.norm(clipped_theta), torch.abs(clipped_theta).max())
-        print('residual_grad', torch.linalg.norm(residual_grad), torch.abs(residual_grad).max())
+        # print('clip0', Config.GEP_CLIP0)
+        # print('clip1', Config.GEP_CLIP1)
+        # print('sigma0', Config.GEP_SIGMA0)
+        # print('sigma1', Config.GEP_SIGMA1)
+        # print('theta_noise', torch.linalg.norm(theta_noise), torch.abs(theta_noise).max())
+        # print('grad_noise', torch.linalg.norm(grad_noise), torch.abs(grad_noise).max())
+        # print('clipped_theta', torch.linalg.norm(clipped_theta), torch.abs(clipped_theta).max())
+        # print('residual_grad', torch.linalg.norm(residual_grad), torch.abs(residual_grad).max())
 
         clipped_theta += theta_noise
         residual_grad += grad_noise

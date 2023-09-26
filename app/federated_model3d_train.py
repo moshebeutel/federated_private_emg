@@ -82,11 +82,11 @@ def single_train(exp_name):
             {user: (cls, prb) for (user, cls, prb) in
              zip(utils.all_users_list, cls_partitions['class'], cls_partitions['prob'])}
 
-        print('Public Class Partitions')
+        # print('Public Class Partitions')
         utils.CLASSES_OF_PUBLIC_USERS = [utils.CIFAR_USER_CLS_PARTITIONS[u][0][0] for u in public_users]
-        print(utils.CLASSES_OF_PUBLIC_USERS)
-        for u in public_users:
-            print(u, ':', utils.CIFAR_USER_CLS_PARTITIONS[u])
+        # print(utils.CLASSES_OF_PUBLIC_USERS)
+        # for u in public_users:
+        #     print(u, ':', utils.CIFAR_USER_CLS_PARTITIONS[u])
 
     gep = None
     if Config.USE_GEP:
@@ -139,7 +139,7 @@ def update_accountant_params(output_fn=lambda s: None):
     else:
         Config.DP_SIGMA = sigma
 
-    output_fn(accountant_params_string())
+    # output_fn(accountant_params_string())
 
 
 def sweep_train(sweep_id, config=None):
@@ -147,6 +147,7 @@ def sweep_train(sweep_id, config=None):
 
         config = wandb.config
         config.update({'sweep_id': sweep_id})
+        print(config)
 
         # if config.dp not in ['GEP_RESIDUALS', 'GEP_NO_RESIDUALS'] and not (config.gep_num_bases == 30
         #                                                                    and config.gep_power_iter == 1):
@@ -191,7 +192,7 @@ def sweep_train(sweep_id, config=None):
         # Config.HIDDEN_DIM = config.hidden_dim
         Config.GEP_NUM_GROUPS = 1
         Config.GEP_NUM_BASES = config.gep_num_bases
-        Config.GEP_HISTORY_GRADS = config.gep_num_bases + 5
+        Config.GEP_HISTORY_GRADS = config.gep_num_bases
         # Config.GEP_POWER_ITER = config.gep_power_iter
         # Config.GEP_USE_PCA = (config.use_pca == 1)
         Config.GEP_USE_PCA = 1
@@ -265,20 +266,21 @@ def run_sweep():
         },
         'epsilon': {
             # 'values': [1.0, 3.0, 8.0]
-            'values': [1e6]
-            # 'values': [1.0]
+            # 'values': [1e6]
+            'values': [1.0]
             # 'values': [0.5, 0.1, 0.01, 0.001]
         },
         # 'sample_with_replacement': {
         #     'values': [0, 1]
         # },
         'agg': {
-            'values': [10]
+            'values': [10, 50]
         },
         'dp': {
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP', 'NO_DP']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
-            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
+            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
+            'values': ['GEP_NO_RESIDUALS']
             # 'values': ['SGD_DP']
             # 'values': ['NO_DP']
 
@@ -287,7 +289,7 @@ def run_sweep():
         #     'values': [1, 0]
         # },
         'num_clients_public': {
-            'values': [20]
+            'values': [150]
             # 'values': [25, 50, 70, 100]
         },
         # 'hidden_dim': {
@@ -296,17 +298,17 @@ def run_sweep():
         'classes_each_user': {
             # 'values': [2, 6, 10]
             # 'values': [2, 6]
-            'values': [2, 6]
+            'values': [2, 6, 10]
         },
         # 'internal_epochs': {
         #     'values': [1, 5]
         # },
         'use_gp': {
-            # 'values': [1]
-            'values': [0, 1]
+            'values': [0]
+            # 'values': [0, 1]
         },
         'gep_num_bases': {
-            'values': [155]
+            'values': [150]
         },
         #
         # 'gep_num_groups': {
