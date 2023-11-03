@@ -106,6 +106,8 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
         # gep.get_anchor_space(model, loss_func=loss_fn)
     # if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
+
+    #sanity check comment out
     clients_in_epoch = [*utils.public_users, *clients_in_epoch]
 
     num_clients_in_epoch = len(clients_in_epoch)
@@ -116,6 +118,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
     # pbar = tqdm(enumerate(clients_in_epoch), desc='Iteration loop')
     # for i, u in pbar:
+
     for i, u in enumerate(clients_in_epoch):
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
 
@@ -154,6 +157,7 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
             if i < Config.NUM_CLIENTS_PUBLIC - 1:
                 p.grad.data += lp.grad.data.squeeze() / Config.NUM_CLIENTS_PUBLIC
 
+        # sanity check comment out
         if Config.USE_GEP and i == len(gep.public_users) - 1:
             gep.get_anchor_space(model, loss_func=loss_fn)
 
@@ -201,6 +205,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                 momentum=0.9)
 
     best_epoch_validation_acc = 0.0
+    epoch_best_epoch_validation_acc = 0
     acc_decrease_count = 0
     best_model = init_model()
 
@@ -280,6 +285,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         if val_acc > best_epoch_validation_acc:
             best_epoch_validation_acc = val_acc
+            epoch_best_epoch_validation_acc = epoch
             acc_decrease_count = 0
             for bp, p in zip(best_model.parameters(), model.parameters()):
                 bp.data = p.data
@@ -294,9 +300,11 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                         'epoch_validation_loss_std': val_loss_std,
                         'epoch_validation_acc_std': val_acc_std,
                         'best_epoch_validation_acc': best_epoch_validation_acc,
+                        'epoch_best_epoch_validation_acc': epoch_best_epoch_validation_acc,
                         'epoch_validation_10th_percentile': val_acc_10th_percentile,
                         'epoch_validation_50th_percentile': val_acc_50th_percentile,
-                        'epoch_validation_90th_percentile': val_acc_90th_percentile
+                        'epoch_validation_90th_percentile': val_acc_90th_percentile,
+                        'epoch_max_norm_grad': gep.max_norm_grad
                         }
 
             if not Config.USE_GP:
