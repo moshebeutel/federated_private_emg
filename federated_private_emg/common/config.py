@@ -14,16 +14,16 @@ class Config:
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
     USE_DROPOUT = False
-    DEVICE = 'cpu'
+    DEVICE = 'cuda'
     BATCH_SIZE = 512
-    NUM_EPOCHS = 2
+    NUM_EPOCHS = 100
     DETERMINISTIC_SEED = True
     SEED = 42 if DETERMINISTIC_SEED else int(datetime.now().timestamp())
 
-    EARLY_STOP_INCREASING_LOSS_COUNT = 10
+    EARLY_STOP_INCREASING_LOSS_COUNT = NUM_EPOCHS  #10
     NUM_WORKERS = 1
     OPTIMIZER_TYPE = 'sgd'
-    LEARNING_RATE = 0.01
+    LEARNING_RATE = 0.1
 
     WEIGHT_DECAY = 1e-3
     MOMENTUM = 0.9
@@ -70,9 +70,10 @@ class Config:
     ADD_DP_NOISE = True
 
     # FL
-    NUM_CLIENTS_PUBLIC, NUM_CLIENT_AGG, NUM_CLIENTS_TRAIN = 150, 50, 400
-    assert NUM_CLIENTS_TRAIN >= NUM_CLIENT_AGG, \
-        f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_TRAIN} train users'
+    NUM_CLIENTS_PUBLIC, NUM_CLIENTS_PRIVATE, NUM_CLIENT_AGG = 150, 250, 50
+    NUM_CLIENTS_TRAIN = NUM_CLIENTS_PRIVATE + NUM_CLIENTS_PUBLIC
+    assert NUM_CLIENTS_PRIVATE >= NUM_CLIENT_AGG, \
+        f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_PRIVATE} train users'
     assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
     # if not USE_GEP:
     #     NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
