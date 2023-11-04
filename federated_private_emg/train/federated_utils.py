@@ -2,8 +2,6 @@ import gc
 import logging
 import os
 import random
-import sys
-
 import torch
 import wandb
 from common import utils
@@ -15,8 +13,7 @@ from fed_priv_models.model_factory import init_model
 from fed_priv_models.gep import GEP
 from fed_priv_models.pFedGP.utils import build_tree, eval_model
 from train.params import TrainParams
-from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch, calc_metrics
-import pandas as pd
+from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
 import numpy as np
 
 
@@ -97,27 +94,22 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
                                  GPs=None,
                                  output_fn=lambda s: None):
     epoch_train_loss, epoch_train_acc, epoch_test_loss, epoch_test_acc = 0.0, 0.0, 0.0, 0.0
+
     sample_fn = random.choices if Config.SAMPLE_CLIENTS_WITH_REPLACEMENT else random.sample
     clients_in_epoch = sample_fn(train_user_list, k=Config.NUM_CLIENT_AGG)
-
-    optimizer.zero_grad()
-
+    public_users = utils.public_users if not Config.SANITY_CHECK else clients_in_epoch
     if Config.USE_GEP:
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
-        # gep.get_anchor_space(model, loss_func=loss_fn)
-    # if Config.PUBLIC_USERS_CONTRIBUTE_TO_LEARNING:
+        gep.public_users = public_users
+    clients_in_epoch = [*public_users, *clients_in_epoch]
 
-    #sanity check comment out
-    clients_in_epoch = [*utils.public_users, *clients_in_epoch]
+    optimizer.zero_grad()
 
     num_clients_in_epoch = len(clients_in_epoch)
 
     for p in model.parameters():
         p.grad = torch.zeros_like(p, device=p.device)
         p.grad_batch = torch.zeros((num_clients_in_epoch, *p.grad.shape), device=p.device)
-
-    # pbar = tqdm(enumerate(clients_in_epoch), desc='Iteration loop')
-    # for i, u in pbar:
 
     for i, u in enumerate(clients_in_epoch):
         user_dataset_folder_name = os.path.join(Config.WINDOWED_DATA_DIR, u)
@@ -136,13 +128,6 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
 
         user_loss, user_acc = 0.0, 0.0
 
-        # if Config.USE_GP:
-        #     assert GPs is not None, f'Config.USE_GP={Config.USE_GP} but GPs is None'
-        #     assert u in GPs, f'User {u} is not in epoch users {GPs.keys()}'
-        #     # build tree at each step
-        #     GPs[u], label_map, _, __ = build_tree(gp=GPs[u], net=local_model, loader=train_loader)
-        #     GPs[u].train()
-
         loss, acc, _, local_model, local_optimizer = \
             run_single_epoch_keep_grads(model=local_model, optimizer=local_optimizer,
                                         loader=train_loader, criterion=loss_fn,
@@ -157,7 +142,6 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
             if i < Config.NUM_CLIENTS_PUBLIC - 1:
                 p.grad.data += lp.grad.data.squeeze() / Config.NUM_CLIENTS_PUBLIC
 
-        # sanity check comment out
         if Config.USE_GEP and i == len(gep.public_users) - 1:
             gep.get_anchor_space(model, loss_func=loss_fn)
 
@@ -167,22 +151,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
         epoch_train_loss += user_loss / num_clients_in_epoch
         epoch_train_acc += user_acc / num_clients_in_epoch
 
-        # Erase local train resources
-        if Config.USE_GP:
-            del GPs[u].tree
-            GPs[u].tree = None
-        del local_model, train_loader, local_optimizer, user_loss, user_acc, loss, acc
-
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-        # pbar.set_description(f"Iteration {i}. User {u}. Epoch running loss {epoch_train_loss}."
-        #                      f" Epoch running acc {epoch_train_acc}")
-
     if Config.USE_GEP:
         assert Config.USE_SGD_DP is False, 'Use GEP or SGD_DP. Not both'
-        gep_batch(accumulated_grads=None, gep=gep, model=model, batchsize=Config.NUM_CLIENT_AGG)
+        gep_batch(gep=gep, model=model, batch_size=Config.NUM_CLIENT_AGG)
     else:
         sgd_dp_batch(model=model, batchsize=Config.NUM_CLIENT_AGG)
 
@@ -251,15 +222,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
         val_acc_10th_percentile = np.percentile(ordered_accs, 10)
         val_acc_50th_percentile = np.percentile(ordered_accs, 50)
         val_acc_90th_percentile = np.percentile(ordered_accs, 90)
-        # print('Val Acc: %g, 10th percentile: %g, 50th percentile: %g, 90th percentile %g' \
-        #       % (np.average(ordered_accs),
-        #          val_acc_10th_percentile,
-        #          val_acc_50th_percentile,
-        #          val_acc_90th_percentile))
 
-        # epoch_pbar.set_description(f'federated global epoch {epoch} '
-        #                            f'train_loss {epoch_train_loss}, train_acc {epoch_train_acc} '
-        #                            f'val set loss {val_loss} val set acc {val_acc}')
         percentiles_accs_str = ''
         if not Config.USE_GP:
             loss_str = f'federated global epoch {epoch} train_loss {epoch_train_loss} val set loss {val_loss} std {val_loss_std}'
@@ -273,15 +236,11 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
         output_fn(loss_str if Config.TOY_STORY else loss_str + acc_str + percentiles_accs_str)
 
-        # logging.debug(acc_per_cls_string(user_accuracies_dict=val_accs, user_list=validation_user_list))
-
         # Release memory
         del t_accs, t_losses, val_losses, val_accs
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        # output_fn([f'{cls}, {CIFAR10_CLASSES_NAMES[cls]}' for cls in utils.CLASSES_OF_PUBLIC_USERS])
 
         if val_acc > best_epoch_validation_acc:
             best_epoch_validation_acc = val_acc
@@ -313,40 +272,15 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
 
             if Config.USE_GEP:
                 errs = torch.tensor(gep.approx_errors)
+                private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
                 log_dict.update({
                     'PUBLIC_approx_error': errs.mean(),
-                    # 'epoch_gep_std_approx_error': errs.std()
-                })
-                # private_errs = torch.tensor(list(gep.approx_error.values()))
-                private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
-
-                # list08, list09, list095 = [], [], []
-                # for pca in gep._selected_pca_list:
-                #     cumsums = pca.explained_variance_ratio_.cumsum()
-                #     list08.append(len(cumsums[cumsums < 0.8]))
-                #     list09.append(len(cumsums[cumsums < 0.9]))
-                #     list095.append(len(cumsums[cumsums < 0.95]))
-                #
-                # num_bases_0_8 = float(sum(list08)) / float(len(list08))
-                # num_bases_0_9 = float(sum(list09)) / float(len(list09))
-                # num_bases_0_95 = float(sum(list095)) / float(len(list095))
-
-                log_dict.update({
-                    # 'epoch_gep_avg_private_approx_error': private_errs.mean().item(),
-                    # 'epoch_gep_std_private_approx_error': private_errs.std().item(),
                     'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
-                    # 'epoch_gep_std_private_approx_error_pca': private_errs_pca.std().item(),
-                    # 'epoch_num_bases_0_8': num_bases_0_8,
-                    # 'epoch_num_bases_0_9': num_bases_0_9
                 })
-                # print('epoch_num_bases_0_8', num_bases_0_8, 'epoch_num_bases_0_9', num_bases_0_9,  'epoch_num_bases_0_95', num_bases_0_95)
-
             wandb.log(log_dict)
 
         if acc_decrease_count > Config.EARLY_STOP_INCREASING_LOSS_COUNT:
             logging.warning(f'Accuracy decreases for {acc_decrease_count} rounds. Quit.')
-            if Config.USE_GEP:
-                output_fn(accountant_params_string())
             break
 
     # Test Eval
@@ -384,19 +318,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
             wandb.log({'test_acc': test_acc, 'test_acc_10th_percentile': test_acc_10th_percentile,
                        'test_acc_50th_percentile': test_acc_50th_percentile,
                        'test_acc_90th_percentile': test_acc_90th_percentile})
-            # new_wandb_row = pd.DataFrame({**{k: v for (k, v) in wandb.config.items()
-            #                                  if k not in ['app_config_dict', 'sweep_id']},
-            #                               **{'best_epoch_validation_acc': best_epoch_validation_acc,
-            #                                  'test_acc_10th_percentile': test_acc_10th_percentile,
-            #                                  'test_acc_50th_percentile': test_acc_50th_percentile,
-            #                                  'test_acc_90th_percentile': test_acc_90th_percentile,
-            #                                  'test_acc': test_acc}}, index=[0])
-            # sweep_id = wandb.config["sweep_id"]
-            # sweep_csv_path = f'{Config.SWEEP_RESULTS_DIR}/{sweep_id}.csv'
-            # new_wandb_row.to_csv(sweep_csv_path, mode='a', index=False, header=True)
-        # output_fn(acc_per_cls_string(user_accuracies_dict=test_accuracies, user_list=test_user_list))
-        if Config.USE_GEP:
-            output_fn(accountant_params_string())
+
         output_fn(f'Test Finished. Test Loss {test_loss} Test Acc {test_acc}')
     output_fn(f'Federated Train Finished')
 

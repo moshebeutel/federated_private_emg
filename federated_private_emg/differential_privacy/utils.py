@@ -1,6 +1,5 @@
 from __future__ import annotations
 from dataclasses import astuple
-
 from backpack import backpack, extend
 from backpack.extensions import BatchGrad, BatchL2Grad
 import torch
@@ -70,11 +69,12 @@ def per_sample_gradient_fwd_bwd(inputs, labels, train_objects, dp_params, zero_g
 
 def attach_gep(net: torch.nn.Module, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], num_bases: int,
                batch_size: int, clip0: float, clip1: float, power_iter: int,
-               num_groups: int, public_users: list[str]):
-    # print('\n==> Creating GEP class instance')
+               num_groups: int, public_users: list[str]) \
+        -> tuple[torch.nn.Module,Callable[[torch.Tensor, torch.Tensor], torch.Tensor], GEP]:
+
     gep = GEP(num_bases, batch_size, clip0, clip1, power_iter)
 
-    gep.public_users = public_users
+    gep.public_users = public_users if not Config.SANITY_CHECK else []
 
     net = extend(net)
 
