@@ -262,8 +262,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                         'epoch_best_epoch_validation_acc': epoch_best_epoch_validation_acc,
                         'epoch_validation_10th_percentile': val_acc_10th_percentile,
                         'epoch_validation_50th_percentile': val_acc_50th_percentile,
-                        'epoch_validation_90th_percentile': val_acc_90th_percentile,
-                        'epoch_max_norm_grad': gep.max_norm_grad
+                        'epoch_validation_90th_percentile': val_acc_90th_percentile
                         }
 
             if not Config.USE_GP:
@@ -274,6 +273,7 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                 errs = torch.tensor(gep.approx_errors)
                 private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
                 log_dict.update({
+                    'epoch_max_norm_grad': gep.max_norm_grad,
                     'PUBLIC_approx_error': errs.mean(),
                     'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
                 })
