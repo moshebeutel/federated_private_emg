@@ -310,8 +310,9 @@ def gep_batch(gep, model, batch_size):
         residual_grad += grad_noise
         del theta_noise, grad_noise
 
-    noisy_grad = get_approx_grad(clipped_theta, bases_list=gep.selected_bases_list,
-                                 num_bases_list=gep.num_bases_list)
+    # noisy_grad = get_approx_grad(clipped_theta, bases_list=gep.selected_bases_list,
+    #                              num_bases_list=gep.num_bases_list)
+    noisy_grad = gep.get_inverse_proj(clipped_theta)
     if Config.GEP_USE_RESIDUAL:
         noisy_grad += residual_grad
 

@@ -270,12 +270,12 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                  'epoch_train_acc': epoch_train_acc})
 
             if Config.USE_GEP:
-                errs = torch.tensor(gep.approx_errors)
-                private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
+                # errs = torch.tensor(gep.approx_errors)
+                # private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
                 log_dict.update({
                     'epoch_max_norm_grad': gep.max_norm_grad,
-                    'PUBLIC_approx_error': errs.mean(),
-                    'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
+                    # 'PUBLIC_approx_error': errs.mean(),
+                    # 'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
                 })
             wandb.log(log_dict)
 

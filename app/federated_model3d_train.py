@@ -32,6 +32,7 @@ def main():
 
         print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
     # update_accountant_params()
+    Config.SANITY_CHECK = True
     Config.GEP_USE_PCA = 1
     sigma = 12.79 # 107.46
     if Config.USE_GEP:
@@ -275,8 +276,9 @@ def run_sweep():
             'values': [50]
         },
         'dp': {
-            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
-            # 'values': ['GEP_NO_RESIDUALS']
+            # 'values': ['SGD_DP']
+            # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
+            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
         },
         'num_clients_public': {
             'values': [50]
