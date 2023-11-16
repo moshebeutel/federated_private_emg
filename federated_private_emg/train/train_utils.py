@@ -22,7 +22,7 @@ def sgd_dp_batch(model, batchsize):
     device = next(model.parameters()).device
     grad_norm_list = torch.zeros(batchsize).to(device)
     for p in model.parameters():
-        grad_batch_private = p.grad_batch[Config.NUM_CLIENTS_PUBLIC:]
+        grad_batch_private = p.grad_batch
         flat_g = grad_batch_private.reshape(batchsize, -1)
         current_norm_list = torch.norm(flat_g, dim=1)
         grad_norm_list += torch.square(current_norm_list)
@@ -31,29 +31,36 @@ def sgd_dp_batch(model, batchsize):
 
     for p in model.parameters():
         # Take grads of private users
-        grad_batch_private = p.grad_batch[Config.NUM_CLIENTS_PUBLIC:]
+        grad_batch_private = p.grad_batch
         del p.grad_batch
 
         # clip and average private grads
         flat_g = grad_batch_private.reshape(batchsize, -1)
         flat_g = torch.div(flat_g, grad_norm_list.reshape(-1, 1))
         grad_batch_private_clipped = flat_g.reshape(batchsize, *p.shape)
+
+        if Config.ADD_DP_NOISE:
+            noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C,
+                                 size=grad_batch_private_clipped.size(), device=p.device) / batchsize
+            grad_batch_private_clipped += noise
+
         mean_grad_private_clipped = grad_batch_private_clipped.mean(dim=0)
 
         # Add noise to mean of private grads
-        noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C,
-                             size=mean_grad_private_clipped.size(), device=p.device) / batchsize if Config.ADD_DP_NOISE \
-            else torch.zeros_like(mean_grad_private_clipped)
-
-        mean_grad_private_clipped_and_noised = mean_grad_private_clipped + noise
+        # noise = torch.normal(mean=0, std=Config.DP_SIGMA * Config.DP_C,
+        #                      size=mean_grad_private_clipped.size(), device=p.device) / batchsize if Config.ADD_DP_NOISE \
+        #     else torch.zeros_like(mean_grad_private_clipped)
+        #
+        # mean_grad_private_clipped_and_noised = mean_grad_private_clipped + noise
 
         # Multiply public and private users by their proportions
-        p.grad.data = (p.grad.data * Config.NUM_CLIENTS_PUBLIC +
-                       mean_grad_private_clipped_and_noised * Config.NUM_CLIENT_AGG)
+        # p.grad.data = (p.grad.data * Config.NUM_CLIENTS_PUBLIC +
+        #                mean_grad_private_clipped_and_noised * Config.NUM_CLIENT_AGG)
+        p.grad.data = mean_grad_private_clipped
         # Divide by sum of private and public to get mean of grads
-        p.grad.data /= (Config.NUM_CLIENTS_PUBLIC + Config.NUM_CLIENT_AGG)
+        # p.grad.data /= (Config.NUM_CLIENTS_PUBLIC + Config.NUM_CLIENT_AGG)
 
-    del grad_norm_list
+    del grad_norm_list, mean_grad_private_clipped, grad_batch_private_clipped, flat_g
 
 
 def run_single_epoch_keep_grads(model, optimizer, loader, criterion,
@@ -290,8 +297,10 @@ def gep_batch(gep, model, batch_size):
     batch_grad_list = []
     for p in model.parameters():
         if hasattr(p, 'grad_batch'):
-            grad_batch_private = p.grad_batch[len(gep.public_users):]
-            assert (not Config.SANITY_CHECK) or len(gep.public_users) == 0.5 * len(p.grad_batch)
+            grad_batch_private = p.grad_batch[:len(gep.public_users)] \
+                if Config.SANITY_CHECK \
+                else p.grad_batch[len(gep.public_users):]
+            assert (not Config.SANITY_CHECK) or len(gep.public_users) == len(p.grad_batch)
             batch_grad_list.append(grad_batch_private.reshape(grad_batch_private.shape[0], -1))
 
     clipped_theta, residual_grad, target_grad = gep(flatten_tensor(batch_grad_list))

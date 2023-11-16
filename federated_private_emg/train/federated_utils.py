@@ -101,7 +101,9 @@ def federated_train_single_epoch(model, loss_fn, optimizer, train_user_list, tra
     if Config.USE_GEP:
         assert Config.USE_GEP == (gep is not None), f'USE_GEP = {Config.USE_GEP} but gep = {gep}'
         gep.public_users = public_users
-    clients_in_epoch = [*public_users, *clients_in_epoch]
+    clients_in_epoch = [*public_users, *clients_in_epoch] if (not Config.SANITY_CHECK and Config.USE_GEP) else clients_in_epoch
+        # if not Config.SANITY_CHECK else\
+        # [cl for pair in zip(public_users, clients_in_epoch) for cl in pair]
 
     optimizer.zero_grad()
 
@@ -270,12 +272,22 @@ def federated_train_model(model, loss_fn, train_user_list, validation_user_list,
                                  'epoch_train_acc': epoch_train_acc})
 
             if Config.USE_GEP:
-                # errs = torch.tensor(gep.approx_errors)
-                # private_errs_pca = torch.tensor(list(gep.approx_error_pca.values()))
+                public_approx_error = np.mean(gep.public_approx_error)
+                public_approx_error_pca = np.mean(gep.public_approx_error_pca)
+                public_diff_approx_error = np.mean(gep.public_diff_approx_error)
+
+                private_approx_error = np.mean(gep.private_approx_error)
+                private_approx_error_pca = np.mean(gep.private_approx_error_pca)
+                private_diff_approx_error = np.mean(gep.private_diff_approx_error)
+
                 log_dict.update({
                     'epoch_max_norm_grad': gep.max_norm_grad,
-                    # 'PUBLIC_approx_error': errs.mean(),
-                    # 'PRIVAT_approx_error_pca': private_errs_pca.mean().item(),
+                    'PUBLIC_approx_error': public_approx_error,
+                    'PUBLIC_approx_error_pca': public_approx_error_pca,
+                    'PUBLIC_diff_approx_error': public_diff_approx_error,
+                    'PRIVAT_approx_error': private_approx_error,
+                    'PRIVAT_approx_error_pca': private_approx_error_pca,
+                    'PRIVAT_diff_approx_error': private_diff_approx_error,
                 })
             wandb.log(log_dict)
 

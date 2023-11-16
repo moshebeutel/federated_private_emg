@@ -32,9 +32,23 @@ def main():
 
         print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
     # update_accountant_params()
+
     Config.SANITY_CHECK = True
+    Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
+    Config.USE_GEP = True
+    Config.USE_SGD_DP = False
+    Config.GEP_USE_RESIDUAL = False
+    Config.CLASSES_PER_USER = 2
+    Config.NUM_CLIENTS_PUBLIC = 50
+    Config.GEP_HISTORY_GRADS = 50
+    Config.GEP_NUM_BASES = 50
+    Config.GEP_NUM_GROUPS = 1
     Config.GEP_USE_PCA = 1
-    sigma = 12.79 # 107.46
+    Config.ADD_DP_NOISE = True
+    Config.NUM_CLIENT_AGG = 50
+
+
+    sigma = 4.722   #12.79 # 107.46
     if Config.USE_GEP:
         Config.GEP_SIGMA0 = sigma
         Config.GEP_SIGMA1 = sigma
@@ -173,7 +187,8 @@ def sweep_train(sweep_id, config=None):
 
         Config.SANITY_CHECK = True
 
-        Config.USE_GP = (config.use_gp == 1)
+        Config.USE_GP = False
+        # Config.USE_GP = (config.use_gp == 1)
         Config.SEED = config.seed
         if config.dp == 'SGD_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.SGD_DP
@@ -181,6 +196,7 @@ def sweep_train(sweep_id, config=None):
             Config.USE_SGD_DP = True
             Config.GEP_USE_RESIDUAL = False
             Config.ADD_DP_NOISE = True
+            Config.SANITY_CHECK = False
         elif config.dp == 'NO_DP':
             Config.DP_METHOD = Config.DP_METHOD_TYPE.NO_DP
             Config.USE_GEP = False
@@ -258,7 +274,7 @@ def run_sweep():
             'values': [0.01]
         },
         'sigma': {
-            'values': [107.46, 12.79, 4.722, 2.016, 0.0]
+            'values': [12.79, 4.722, 2.016, 0.0]
             # ϵ = 0.01→ noise - multiplier = 874.16
             # ϵ = 0.1→ noise - multiplier = 107.46
             # ϵ = 1.0→ noise - multipllier = 12.79
@@ -266,7 +282,7 @@ def run_sweep():
             # ϵ = 8.0→ noise - multipllier = 2.016
         },
         'seed': {
-            'values': [20]
+            'values': [40]
             # 'values': [20, 40, 60]
         },
         # 'sample_with_replacement': {
@@ -276,9 +292,8 @@ def run_sweep():
             'values': [50]
         },
         'dp': {
-            # 'values': ['SGD_DP']
+            'values': ['SGD_DP', 'GEP_NO_RESIDUALS']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
-            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
         },
         'num_clients_public': {
             'values': [50]
@@ -287,10 +302,10 @@ def run_sweep():
             # 'values': [2, 6, 10]
             'values': [2]
         },
-        'use_gp': {
-            'values': [0]
-            # 'values': [0, 1]
-        },
+        # 'use_gp': {
+        #     'values': [0]
+        #     # 'values': [0, 1]
+        # },
         # 'gep_num_bases': {
         #     'values': [150]
         # },
@@ -302,5 +317,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()
