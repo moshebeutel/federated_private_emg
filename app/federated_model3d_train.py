@@ -33,7 +33,7 @@ def main():
         print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
     # update_accountant_params()
 
-    Config.SANITY_CHECK = True
+    Config.SANITY_CHECK = False
     Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
     Config.USE_GEP = True
     Config.USE_SGD_DP = False
@@ -185,7 +185,7 @@ def sweep_train(sweep_id, config=None):
         # if config.dp == 'NO_DP' and not config.epsilon == 8.0:
         #     return
 
-        Config.SANITY_CHECK = True
+        Config.SANITY_CHECK = False
 
         Config.USE_GP = False
         # Config.USE_GP = (config.use_gp == 1)
@@ -274,7 +274,8 @@ def run_sweep():
             'values': [0.01]
         },
         'sigma': {
-            'values': [12.79, 4.722, 2.016, 0.0]
+            # 'values': [12.79, 4.722, 2.016, 0.0]
+            'values': [12.79, 2.016, 0.0]
             # ϵ = 0.01→ noise - multiplier = 874.16
             # ϵ = 0.1→ noise - multiplier = 107.46
             # ϵ = 1.0→ noise - multipllier = 12.79
@@ -282,8 +283,8 @@ def run_sweep():
             # ϵ = 8.0→ noise - multipllier = 2.016
         },
         'seed': {
-            'values': [40]
-            # 'values': [20, 40, 60]
+            # 'values': [40]
+            'values': [20, 40, 60]
         },
         # 'sample_with_replacement': {
         #     'values': [0, 1]
@@ -292,15 +293,15 @@ def run_sweep():
             'values': [50]
         },
         'dp': {
-            'values': ['SGD_DP', 'GEP_NO_RESIDUALS']
+            'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS']
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
         },
         'num_clients_public': {
-            'values': [50]
+            'values': [150]
         },
         'classes_each_user': {
             # 'values': [2, 6, 10]
-            'values': [2]
+            'values': [2, 10]
         },
         # 'use_gp': {
         #     'values': [0]
@@ -317,5 +318,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    main()
-    # run_sweep()
+    # main()
+    run_sweep()

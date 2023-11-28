@@ -36,7 +36,7 @@ class Config:
     TEST_AT_END = True
 
     WRITE_TO_WANDB = True
-    SANITY_CHECK = True
+    SANITY_CHECK = False
 
     # GP
     USE_GP = False
