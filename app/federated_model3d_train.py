@@ -302,7 +302,7 @@ def run_sweep():
 
     parameters_dict.update({
         'clip': {
-            'values': [0.01]
+            'values': [1000000, 0.01]
         },
         'sigma': {
             # 'values': [12.79, 4.722, 2.016, 0.0]

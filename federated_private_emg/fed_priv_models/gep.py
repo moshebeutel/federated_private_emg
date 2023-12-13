@@ -1,6 +1,7 @@
 # Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
 import gc
 from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import torch
 import torch.nn as nn
@@ -95,7 +96,8 @@ def check_approx_error_pca(pca: PCA, target: np.array) -> float:
 
     embedding: np.ndarray = pca.transform(target)
     approx: np.ndarray = pca.inverse_transform(embedding)
-    error: float = np.linalg.norm(target - approx)
+    # error: float = np.linalg.norm(target - approx)
+    error: float = cosine_similarity(target, approx)
 
     return error / target_norm
 
