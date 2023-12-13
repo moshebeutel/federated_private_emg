@@ -3,18 +3,19 @@ from __future__ import annotations
 import errno
 import logging
 import os
+import random
 import re
 import sys
-import time
 import typing
 from collections import defaultdict
 from datetime import datetime
 from math import sqrt, pow
-import random
 
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader
+
 from common.config import Config
 
 if Config.CIFAR_DATA:
@@ -36,31 +37,68 @@ TEST_SET = list(zip(FULL_USER_LIST, CONCAT_TRAJ[1:]))
 DATA_COEFFS = torch.rand((Config.OUTPUT_DIM, Config.DATA_DIM), dtype=torch.float,
                          requires_grad=False) * Config.DATA_SCALE
 
-if Config.TOY_STORY or Config.CIFAR_DATA:
-    train_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_PUBLIC + 1, Config.NUM_CLIENTS_TRAIN + 1)]
-    public_users = [('%d' % i).zfill(4) for i in range(1, Config.NUM_CLIENTS_PUBLIC + 1)]
-    # if not Config.USE_GEP:
-    #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
-    #     train_user_list = public_users + train_user_list
-    #     public_users = []
-    #     Config.NUM_CLIENTS_PUBLIC = 0
-    validation_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + 1,
-                                                               Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1)]
-    test_user_list = [('%d' % i).zfill(4) for i in range(Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL + 1,
-                                                         Config.NUM_CLIENTS_TRAIN + Config.NUM_CLIENTS_VAL +
-                                                         Config.NUM_CLIENTS_TEST + 1)]
-else:
-    public_users = ['04', '13']
-    train_user_list = ['04', '13', '35', '08']
-    validation_user_list = ['22', '23']
-    test_user_list = ['07', '12']
 
-all_users_list = list(set(public_users + train_user_list + validation_user_list + test_user_list))
-USERS_BIASES = {user: bias for (user, bias) in
-                zip(all_users_list, (Config.USER_BIAS_SCALE * torch.randn(size=(len(all_users_list),))).tolist())}
-USERS_VARIANCES = {user: variance for (user, variance) in zip(all_users_list,
-                                                              (Config.DATA_NOISE_SCALE * torch.rand(
-                                                                  size=(len(all_users_list),))).tolist())}
+class UserListsCreator:
+    NUM_ALL_USERS = 900
+
+    def __init__(self, num_public, num_private=250, num_val=50, num_test=400):
+        self.public_users = ['04', '13']
+        self.train_user_list = ['04', '13', '35', '08']
+        self.validation_user_list = ['22', '23']
+        self.test_user_list = ['07', '12']
+
+        if Config.TOY_STORY or Config.CIFAR_DATA:
+            num_active_users = num_public + num_private + num_val + num_test
+            num_dummy_users = UserListsCreator.NUM_ALL_USERS - num_active_users
+            assert num_dummy_users > 0, f'Expected num active users be less than {UserListsCreator.NUM_ALL_USERS}'
+
+            self.train_user_list = [('%d' % i).zfill(4) for i in range(num_public + 1,
+                                                                       num_public +
+                                                                       num_private+ 1)]
+
+            self.public_users = [('%d' % i).zfill(4) for i in range(1, num_public + 1)]
+            # if not Config.USE_GEP:
+            #     Config.NUM_CLIENT_AGG += Config.NUM_CLIENTS_PUBLIC
+            #     train_user_list = public_users + train_user_list
+            #     public_users = []
+            #     Config.NUM_CLIENTS_PUBLIC = 0
+            self.validation_user_list = [('%d' % i).zfill(4) for i in range(num_public +
+                                                                            num_private + 1,
+                                                                            num_public +
+                                                                            num_private
+                                                                            + num_val + 1)]
+
+            self.test_user_list = [('%d' % i).zfill(4) for i in range(num_public +
+                                                                      num_private +
+                                                                      num_val + 1,
+                                                                      num_public +
+                                                                      num_private +
+                                                                      num_val +
+                                                                      num_test + 1)]
+
+            self.dummy_users = [('%d' % i).zfill(4) for i in range(num_public +
+                                                                   num_private +
+                                                                   num_val +
+                                                                   num_test + 1,
+                                                                   UserListsCreator.NUM_ALL_USERS + 1)]
+
+        self.all_users_list = list(set(self.public_users +
+                                       self.train_user_list +
+                                       self.validation_user_list +
+                                       self.test_user_list +
+                                       self.dummy_users))
+        assert len(self.all_users_list) == UserListsCreator.NUM_ALL_USERS, \
+            f' Expected all users amount to {UserListsCreator.NUM_ALL_USERS}. Got {len(self.all_users_list)}'
+
+        self.USERS_BIASES = {user: bias for (user, bias) in
+                             zip(self.all_users_list,
+                                 (Config.USER_BIAS_SCALE * torch.randn(size=(len(self.all_users_list),))).tolist())}
+        self.USERS_VARIANCES = {user: variance for (user, variance) in zip(self.all_users_list,
+                                                                           (Config.DATA_NOISE_SCALE * torch.rand(
+                                                                               size=(
+                                                                                   len(self.all_users_list),))).tolist())}
+
+
 if Config.CIFAR_DATA:
     if Config.CIFAR10_DATA:
         normalization = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
@@ -93,17 +131,49 @@ if Config.CIFAR_DATA:
     CIFAR_VALIDATION_LOADER = torch.utils.data.DataLoader(train_set, batch_size=Config.BATCH_SIZE, shuffle=False)
     CIFAR_TEST_LOADER = torch.utils.data.DataLoader(test_set, batch_size=Config.BATCH_SIZE, shuffle=False)
     CIFAR_LOADERS = {'train': CIFAR_TRAIN_LOADER, 'validation': CIFAR_VALIDATION_LOADER,
-                       'test': CIFAR_TEST_LOADER}
-    CIFAR_USER_LOADERS = {}
-    CIFAR_USER_CLS_PARTITIONS = {}
+                     'test': CIFAR_TEST_LOADER}
 
+    # CIFAR_USER_LOADERS = {}
+
+    CIFAR_USER_CLS_PARTITIONS = {}
 
     CIFAR10_CLASSES_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
     CLASSES_OF_PUBLIC_USERS = []
 
+
+    class CifarUserLoadersCreator:
+        CIFAR_USER_LOADERS: dict[str: dict[str: DataLoader]] = None
+        CIFAR_USER_CLS_PARTITIONS = {}
+        CLASSES_OF_PUBLIC_USERS = []
+
+        def __init__(self, all_users_list, public_users):
+            assert CifarUserLoadersCreator.CIFAR_USER_LOADERS is None
+
+            loaders, cls_partitions = gen_random_loaders(num_users=len(all_users_list),
+                                                         bz=Config.BATCH_SIZE,
+                                                         classes_per_user=Config.CLASSES_PER_USER)
+
+            CifarUserLoadersCreator.CIFAR_USER_LOADERS = \
+                {user: {'train': train_loader, 'validation': validation_loader, 'test': test_loader}
+                 for user, train_loader, validation_loader, test_loader in
+                 zip(all_users_list, loaders[0], loaders[1], loaders[2])}
+
+            CifarUserLoadersCreator.CIFAR_USER_CLS_PARTITIONS = \
+                {user: (cls, prb) for (user, cls, prb) in
+                 zip(all_users_list, cls_partitions['class'], cls_partitions['prob'])}
+
+            # print('Public Class Partitions')
+            CifarUserLoadersCreator.CLASSES_OF_PUBLIC_USERS = [self.CIFAR_USER_CLS_PARTITIONS[u][0][0] for u in
+                                                               public_users]
+
+
+    def get_cifar_user_loader(u):
+        return CifarUserLoadersCreator.CIFAR_USER_LOADERS[u]
+
+
     def get_users_list_for_class(cls: int, from_users: list[str] = None) -> list[str]:
-        subset_of = CIFAR_USER_CLS_PARTITIONS.keys() if from_users is None else from_users
-        l_cls = [u for u in subset_of if cls in CIFAR_USER_CLS_PARTITIONS[u][0]]
+        subset_of = CifarUserLoadersCreator.CIFAR_USER_CLS_PARTITIONS.keys() if from_users is None else from_users
+        l_cls = [u for u in subset_of if cls in CifarUserLoadersCreator.CIFAR_USER_CLS_PARTITIONS[u][0]]
         return l_cls
 
 
@@ -348,7 +418,7 @@ def init_data_loaders(datasets_folder_name,
     for dataset in datasets:
         if Config.CIFAR_DATA:
             u = datasets_folder_name[-4:]
-            loader = CIFAR_USER_LOADERS[u][dataset]
+            loader = get_cifar_user_loader(u)[dataset]
         else:
             X, y = load_datasets(datasets_folder_name, f'X_{dataset}_windowed.pt', f'y_{dataset}_windowed.pt',
                                  datasize=datasize)

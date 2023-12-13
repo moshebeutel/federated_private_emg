@@ -1,7 +1,5 @@
 # Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
 import gc
-
-import sklearn.decomposition
 from sklearn.decomposition import PCA
 import numpy as np
 import torch
@@ -9,7 +7,7 @@ import torch.nn as nn
 # package for computing individual gradients
 from backpack import backpack
 from backpack.extensions import BatchGrad
-
+import joblib
 from common.config import Config
 from common.utils import flatten_tensor
 
@@ -55,7 +53,7 @@ def inplace_clipping(matrix, clip):
             col /= (col_norm / clip)
 
 
-def check_approx_error_pca(pca: PCA, target: np.array):
+def check_approx_error_pca(pca: PCA, target: np.array) -> float:
     """
         Calculate the normalized approximation error between the target matrix and its PCA reconstruction.
 
@@ -161,7 +159,7 @@ def check_approx_error_np(L: np.ndarray, target: np.ndarray) -> float:
     target_norm: float = np.linalg.norm(target)
     assert target_norm != 0, 'target is zero vector'
 
-    target_mean: np.array = target.mean(0, keepdims=True)    # (n,1)
+    target_mean: np.array = target.mean(0, keepdims=True)  # (n,1)
     target_zero_mean: np.array = target - target_mean  # (n, m)
 
     encode: np.array = np.matmul(target_zero_mean, L)  # (n, m) X (m, k) = (n, k)
@@ -264,6 +262,9 @@ class GEP(nn.Module):
         self._max_norm_grad = 0
         self._pca = PCA(n_components=num_bases)
         self._anchor_grads = None
+
+        self.iter = 0
+
     @property
     def max_norm_grad(self):
         return self._max_norm_grad
@@ -296,6 +297,8 @@ class GEP(nn.Module):
         else:
             anchor_grads = current_anchor_grads
         self._anchor_grads = anchor_grads
+        print(self._anchor_grads.shape)
+
         with (torch.no_grad()):
             num_param_list = self.num_param_list
 
@@ -326,6 +329,14 @@ class GEP(nn.Module):
                 # num_bases, pub_error, pca = get_bases(pub_grad - mean, num_bases, self.power_iter, logging)
                 pub_grad_np: np.array = pub_grad.cpu().detach().numpy()
                 pca: PCA = get_bases(pub_grad_np, num_bases)
+
+                # with open(f'pub_grad_iter_{self.iter}.npy', 'wb') as f:
+                #     np.save(f, pub_grad_np)
+
+                # with open(f'pca_components_iter_{self.iter}.npy', 'wb') as f:
+                #     np.save(f, pca.components_)
+                # joblib.dump(pca, f'pca_iter_{self.iter}.pkl')
+
                 # pub_error: float = check_approx_error(torch.from_numpy(pca.components_).T.to(pub_grad.device),
                 #                                        pub_grad)
                 pub_approx_error: float = check_approx_error_np(pca.components_.T, pub_grad_np)
@@ -379,7 +390,18 @@ class GEP(nn.Module):
                 max_norm_grad = max(max_norm_grad, float(torch.max(torch.norm(grad))))
                 # selected_pca = self._selected_pca_list[i].to(grad.device)
                 grad_np = grad.cpu().detach().numpy()
-                embedding_by_pca = torch.from_numpy(self._pca.transform(grad_np)).to(grad.device)
+                # with open(f'private_grad_iter_{self.iter}.npy', 'wb') as f:
+                #     np.save(f, grad_np)
+                embedding_np = self._pca.transform(grad_np)
+                embedding_by_pca = torch.from_numpy(embedding_np).to(grad.device)
+
+                # with open(f'embedding_np_iter_{self.iter}.npy', 'wb') as f:
+                #     np.save(f, embedding_np)
+                #
+                # self.iter += 1
+                # if self.iter > 4:
+                #     raise Exception
+
                 approx_error: float = check_approx_error_np(self._pca.components_.T, grad_np)
                 approx_error_pca: float = check_approx_error_pca(self._pca, grad_np)
                 diff_errors: float = abs(approx_error - approx_error_pca)
@@ -423,11 +445,14 @@ class GEP(nn.Module):
             # no_reduction_approx_pca = get_approx_grad(concatenated_embedding_pca, bases_list=self._selected_pca_list,
             #                                           num_bases_list=self.num_bases_list)
             no_reduction_approx_pca = self.get_inverse_proj(concatenated_embedding_pca)
-            if Config.GEP_HISTORY_GRADS > 0:
-                min_shape = min(target_grad.shape[1], no_reduction_approx_pca.shape[1])
-                residual_gradients_pca = target_grad[:, :min_shape] - no_reduction_approx_pca[:, :min_shape]
-            else:
-                residual_gradients_pca = target_grad - no_reduction_approx_pca
+
+            # if Config.GEP_HISTORY_GRADS > 0:
+            #     min_shape = min(target_grad.shape[1], no_reduction_approx_pca.shape[1])
+            #     residual_gradients_pca = target_grad[:, :min_shape] - no_reduction_approx_pca[:, :min_shape]
+            # else:
+            #     residual_gradients_pca = target_grad - no_reduction_approx_pca
+
+            residual_gradients_pca = target_grad - no_reduction_approx_pca
 
             clip_column(residual_gradients_pca, clip=self.clip1)  # inplace clipping to save memory
             clipped_residual_gradients_pca = residual_gradients_pca

@@ -4,12 +4,13 @@ import os
 from datetime import datetime
 from enum import Enum
 from math import sqrt, log
+from pathlib import Path
 
 
 class Config:
     WORKDIR = os.getcwd()
     LOG_FOLDER = os.path.join(WORKDIR, 'log')
-    SWEEP_RESULTS_DIR = '/home/user1/GIT/federated_private_emg/sweep_results'
+    SWEEP_RESULTS_DIR = f'{Path().home()}/GIT/federated_private_emg/sweep_results'
     HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
     FEATURES_DATAFRAMES_DIR = 'features_dataframes'
     USE_GROUPNORM = False
@@ -72,10 +73,8 @@ class Config:
 
     # FL
     NUM_CLIENTS_PUBLIC, NUM_CLIENTS_PRIVATE, NUM_CLIENT_AGG = 50, 250, 50
-    NUM_CLIENTS_TRAIN = NUM_CLIENTS_PRIVATE + NUM_CLIENTS_PUBLIC
     assert NUM_CLIENTS_PRIVATE >= NUM_CLIENT_AGG, \
         f'Cant aggregate {NUM_CLIENT_AGG} out of {NUM_CLIENTS_PRIVATE} train users'
-    assert NUM_CLIENTS_TRAIN >= NUM_CLIENTS_PUBLIC, f'Public users can not be more than train users'
     # if not USE_GEP:
     #     NUM_CLIENT_AGG += NUM_CLIENTS_PUBLIC
 
@@ -83,20 +82,20 @@ class Config:
     NUM_CLIENTS_TEST = 400
     SAMPLE_CLIENTS_WITH_REPLACEMENT = True
     NUM_INTERNAL_EPOCHS = 1
-    CIFAR10_CLASSES_PER_USER = 2    # 2
+    CIFAR10_CLASSES_PER_USER = 2    # 10
     CIFAR100_CLASSES_PER_USER = 100  # 10
 
     # DATASET
     DATASET_TYPE = Enum('DATASET_TYPE', ['putEMG', 'TOY_STORY', 'CIFAR10', 'CIFAR100'])
-    DATASET = DATASET_TYPE.CIFAR10
+    DATASET = DATASET_TYPE.CIFAR100
 
     # CIFAR10
     CIFAR10_DATA = (DATASET == DATASET_TYPE.CIFAR10)
-    CIFAR10_DATASET_DIR = os.path.join(WORKDIR, 'data/cifar10')
+    CIFAR10_DATASET_DIR = Path.home() / 'datasets/CIFAR10'
 
     # CIFAR100
     CIFAR100_DATA = (DATASET == DATASET_TYPE.CIFAR100)
-    CIFAR100_DATASET_DIR = os.path.join(WORKDIR, 'data/cifar100')
+    CIFAR100_DATASET_DIR = Path.home() / 'datasets/CIFAR100'
 
     CIFAR_DATA = CIFAR100_DATA or CIFAR10_DATA
 
