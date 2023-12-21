@@ -83,7 +83,7 @@ def check_approx_error_pca(pca: PCA, target: np.array) -> float:
         target = np.random.rand(20, 10)
         error = check_approx_error_pca(pca, target)
         print(f"PCA Approximation error: {error}")
-        ```
+
 
         Note:
         The function uses a pre-fitted PCA model to compute the PCA embedding and reconstruction of the target matrix.
@@ -97,9 +97,10 @@ def check_approx_error_pca(pca: PCA, target: np.array) -> float:
     embedding: np.ndarray = pca.transform(target)
     approx: np.ndarray = pca.inverse_transform(embedding)
     # error: float = np.linalg.norm(target - approx)
-    error: float = cosine_similarity(target, approx)
-
-    return error / target_norm
+    # return error / target_norm
+    k = cosine_similarity(target, approx)
+    norm_similarity = np.linalg.norm(k)/np.linalg.norm(np.ones_like(k))
+    return 1.0 - norm_similarity
 
 
 def check_embedding_error(grad: torch.tensor, basis: torch.tensor) -> float:

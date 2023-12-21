@@ -302,11 +302,13 @@ def run_sweep():
 
     parameters_dict.update({
         'clip': {
-            'values': [1000000, 0.01]
+            'values': [4.0]
+            # 'values': [0.01]
+            # 'values': [1000000, 0.01]
         },
         'sigma': {
-            # 'values': [12.79, 4.722, 2.016, 0.0]
-            'values': [12.79, 2.016, 0.0]
+            'values': [12.79, 4.722, 2.016, 0.0]
+            # 'values': [0.0]
             # 'values': [12.79]
             # ϵ = 0.01→ noise - multiplier = 874.16
             # ϵ = 0.1→ noise - multiplier = 107.46
@@ -330,12 +332,12 @@ def run_sweep():
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
         },
         'num_clients_public': {
-            'values': [150]
+            'values': [50, 150]
             # 'values': [10]
         },
         'classes_each_user': {
             # 'values': [2, 6, 10]
-            'values': [10]
+            'values': [2, 10]
             # 'values': [10, 100]
         },
         # 'use_gp': {
@@ -344,7 +346,7 @@ def run_sweep():
         # },
         'gep_num_bases': {
             # 'values': [100, 150]
-            'values': [150]
+            'values': [50, 150]
         },
     })
 
