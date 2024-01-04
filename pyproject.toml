@@ -33,6 +33,10 @@ poethepoet = "^0.24.4"
 [tool.poe.tasks]
 force-pypolyagamma = "python -m pip install pypolyagamma"
 
+[tool.poetry.scripts]
+federated_run = "app.federated_model3d_train:main"
+federated_sweep = "app.federated_model3d_train:run_sweep"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
