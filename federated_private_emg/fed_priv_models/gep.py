@@ -96,10 +96,8 @@ def check_approx_error_pca(pca: PCA, target: np.array) -> float:
 
     embedding: np.ndarray = pca.transform(target)
     approx: np.ndarray = pca.inverse_transform(embedding)
-    # error: float = np.linalg.norm(target - approx)
-    # return error / target_norm
-    k = cosine_similarity(target, approx)
-    norm_similarity = np.linalg.norm(k)/np.linalg.norm(np.ones_like(k))
+    k = np.diag(cosine_similarity(target, approx))
+    norm_similarity = np.mean(np.abs(k), axis=0)
     return 1.0 - norm_similarity
 
 
