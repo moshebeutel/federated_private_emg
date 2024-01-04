@@ -2,8 +2,8 @@ import logging
 from functools import partial
 import torch.nn
 import wandb
-from common.config import Config
-from common.utils import CifarUserLoadersCreator
+from federated_private_emg.common.config import Config
+from federated_private_emg.common.utils import CifarUserLoadersCreator
 
 
 def get_exp_name():
@@ -76,16 +76,16 @@ def main():
 
 
 def single_train(exp_name):
-    from common import utils
+    from federated_private_emg.common import utils
     # from common.utils import USERS_BIASES, USERS_VARIANCES, public_users, train_user_list, validation_user_list, \
     # test_user_list
-    from common.utils import UserListsCreator, gen_random_loaders
-    from differential_privacy.utils import attach_gep
-    from fed_priv_models.model_factory import init_model
-    from fed_priv_models.pFedGP.Learner import pFedGPFullLearner
-    from fed_priv_models.pFedGP.utils import set_seed
-    from train.federated_utils import federated_train_model
-    from train.params import TrainParams
+    from federated_private_emg.common.utils import UserListsCreator, gen_random_loaders
+    from federated_private_emg.differential_privacy.utils import attach_gep
+    from federated_private_emg.fed_priv_models.model_factory import init_model
+    from federated_private_emg.fed_priv_models.pFedGP.Learner import pFedGPFullLearner
+    from federated_private_emg.fed_priv_models.pFedGP.utils import set_seed
+    from federated_private_emg.train.federated_utils import federated_train_model
+    from federated_private_emg.train.params import TrainParams
     if Config.WRITE_TO_WANDB:
         wandb.run.name = exp_name
     set_seed(Config.SEED)

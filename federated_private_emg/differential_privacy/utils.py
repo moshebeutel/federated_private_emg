@@ -4,9 +4,10 @@ from backpack import backpack, extend
 from backpack.extensions import BatchGrad, BatchL2Grad
 import torch
 from collections.abc import Callable
-from common.config import Config
-from differential_privacy.params import DpParams
-from fed_priv_models.gep import GEP
+
+from federated_private_emg.common.config import Config
+from federated_private_emg.differential_privacy.params import DpParams
+from federated_private_emg.fed_priv_models.gep import GEP
 
 
 def add_dp_noise_using_per_sample(model,

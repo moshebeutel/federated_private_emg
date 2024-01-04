@@ -1,19 +1,19 @@
-from collections import defaultdict
-from common import utils
-import torch
-import numpy as np
-import random
-import logging
 import argparse
-from contextlib import contextmanager
-import os
 import json
-from pathlib import Path
+import logging
+import os
+import random
 import sys
 import warnings
+from collections import defaultdict
+from contextlib import contextmanager
+from pathlib import Path
 
-from common.config import Config
-from common.utils import CifarUserLoadersCreator
+import numpy as np
+import torch
+
+from federated_private_emg.common.config import Config
+from federated_private_emg.common.utils import CifarUserLoadersCreator
 
 
 @torch.no_grad()

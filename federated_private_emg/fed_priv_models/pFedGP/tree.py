@@ -2,11 +2,9 @@
 # *****************************************************
 import logging
 from collections import deque
-
 import torch
 from torch import nn
-
-from common.config import Config
+from federated_private_emg.common.config import Config
 from federated_private_emg.fed_priv_models.pFedGP.class_splits import *
 from federated_private_emg.fed_priv_models.pFedGP.node import NodepFedGPFull, NodepFedGPIPData, NodepFedGPIPCompute
 from federated_private_emg.fed_priv_models.pFedGP.utils import (detach_to_numpy, pytorch_take)

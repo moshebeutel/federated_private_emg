@@ -1,16 +1,14 @@
 # Taken from https://github.com/dayu11/Gradient-Embedding-Perturbation
 import gc
-from sklearn.decomposition import PCA
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+
 # package for computing individual gradients
-from backpack import backpack
-from backpack.extensions import BatchGrad
-import joblib
-from common.config import Config
-from common.utils import flatten_tensor
+from federated_private_emg.common.config import Config
+from federated_private_emg.common.utils import flatten_tensor
 
 
 # from memory_profiler import profile

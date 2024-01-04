@@ -1,13 +1,9 @@
 import logging
-
 import torch.nn
-import torchvision
 from torch import nn
-from torchvision.models import ResNet18_Weights
-from fed_priv_models.cnn_target import CNNTarget
-from common.config import Config
-from fed_priv_models.pad_operators import Reshape3Bands, PadBeforeLast, PadLastDimCircular, Squeeze
-from fed_priv_models.resnet_cifar import resnet20
+from federated_private_emg.common.config import Config
+from federated_private_emg.fed_priv_models.pad_operators import Reshape3Bands, PadBeforeLast, PadLastDimCircular, Squeeze
+from federated_private_emg.fed_priv_models.resnet_cifar import resnet20
 
 
 def init_model():

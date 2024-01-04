@@ -16,7 +16,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from common.config import Config
+from federated_private_emg.common.config import Config
 
 if Config.CIFAR_DATA:
     from torchvision.datasets import CIFAR10, CIFAR100

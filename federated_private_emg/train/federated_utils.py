@@ -2,19 +2,18 @@ import gc
 import logging
 import os
 import random
+
+import numpy as np
 import torch
 import wandb
-from common import utils
-from common.config import Config
-from common.utils import init_data_loaders, labels_to_consecutive, \
-    create_toy_data, CIFAR10_CLASSES_NAMES, get_users_list_for_class
-from differential_privacy.accountant_utils import accountant_params_string
-from fed_priv_models.model_factory import init_model
-from fed_priv_models.gep import GEP
-from fed_priv_models.pFedGP.utils import build_tree, eval_model
-from train.params import TrainParams
-from train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
-import numpy as np
+
+from federated_private_emg.common.config import Config
+from federated_private_emg.common.utils import init_data_loaders, CIFAR10_CLASSES_NAMES, get_users_list_for_class
+from federated_private_emg.fed_priv_models.gep import GEP
+from federated_private_emg.fed_priv_models.model_factory import init_model
+from federated_private_emg.fed_priv_models.pFedGP.utils import eval_model
+from federated_private_emg.train.params import TrainParams
+from federated_private_emg.train.train_utils import run_single_epoch, run_single_epoch_keep_grads, gep_batch, sgd_dp_batch
 
 
 # def create_public_dataset(public_users: str or list[str]):

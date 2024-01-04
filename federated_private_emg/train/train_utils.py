@@ -7,15 +7,15 @@ import wandb
 from backpack import backpack
 from backpack.extensions import BatchGrad
 from tqdm import tqdm
-from common.utils import labels_to_consecutive, flatten_tensor
-from differential_privacy.params import DpParams
-from differential_privacy.accountant_utils import add_dp_noise
-from fed_priv_models.gep import GEP, get_approx_grad
-from fed_priv_models.pFedGP.utils import build_tree
-from train.params import TrainParams
-from train.train_objects import TrainObjects
+from federated_private_emg.common.utils import labels_to_consecutive, flatten_tensor
+from federated_private_emg.differential_privacy.params import DpParams
+from federated_private_emg.differential_privacy.accountant_utils import add_dp_noise
+from federated_private_emg.fed_priv_models.gep import GEP, get_approx_grad
+from federated_private_emg.fed_priv_models.pFedGP.utils import build_tree
+from federated_private_emg.train.params import TrainParams
+from federated_private_emg.train.train_objects import TrainObjects
 from collections.abc import Callable
-from common.config import Config
+from federated_private_emg.common.config import Config
 
 
 def sgd_dp_batch(model, batchsize):

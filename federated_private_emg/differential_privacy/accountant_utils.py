@@ -9,9 +9,9 @@ import six
 import torch
 from scipy import special
 
-from common.config import Config
-from common.utils import calc_grad_norm
-from differential_privacy.params import DpParams
+from federated_private_emg.common.config import Config
+from federated_private_emg.common.utils import calc_grad_norm
+from federated_private_emg.differential_privacy.params import DpParams
 
 
 def _compute_eps(orders, rdp, delta):
