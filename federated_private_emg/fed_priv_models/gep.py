@@ -252,6 +252,7 @@ class GEP(nn.Module):
 
         self.private_approx_error = []
         self.private_approx_error_pca = []
+        self.private_approx_error_noised_pca = []
         self.private_diff_approx_error = []
 
         self.max_grads = Config.GEP_HISTORY_GRADS
@@ -260,7 +261,9 @@ class GEP(nn.Module):
         self.history_anchor_grads = None
         self._max_norm_grad = 0
         self._pca = PCA(n_components=num_bases)
+        self._noised_pca = PCA(n_components=num_bases)
         self._anchor_grads = None
+        self._noised_anchor_grads = None
 
         self.iter = 0
 
@@ -295,7 +298,11 @@ class GEP(nn.Module):
             anchor_grads = self.history_anchor_grads
         else:
             anchor_grads = current_anchor_grads
+        noise_for_anchor_grads: torch.tensor = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
+                                   size=anchor_grads.shape,
+                                   device=anchor_grads.device) / Config.NUM_CLIENT_AGG
         self._anchor_grads = anchor_grads
+        self._noised_anchor_grads = anchor_grads + noise_for_anchor_grads
         print(self._anchor_grads.shape)
 
         with (torch.no_grad()):
@@ -316,6 +323,7 @@ class GEP(nn.Module):
             device = next(net.parameters()).device
             for i, num_param in enumerate(num_param_list):
                 pub_grad: torch.tensor = anchor_grads[:, offset:offset + num_param]
+                noised_pub_grad: torch.tensor = self._noised_anchor_grads[:, offset:offset + num_param]
 
                 offset += num_param
 
@@ -327,7 +335,9 @@ class GEP(nn.Module):
                 # print('pub grad mean largest value', mean.absolute().max())
                 # num_bases, pub_error, pca = get_bases(pub_grad - mean, num_bases, self.power_iter, logging)
                 pub_grad_np: np.array = pub_grad.cpu().detach().numpy()
+                noised_pub_grad_np: np.array = noised_pub_grad.cpu().detach().numpy()
                 pca: PCA = get_bases(pub_grad_np, num_bases)
+                noised_pca: PCA = get_bases(noised_pub_grad_np, num_bases)
 
                 # with open(f'pub_grad_iter_{self.iter}.npy', 'wb') as f:
                 #     np.save(f, pub_grad_np)
@@ -348,12 +358,13 @@ class GEP(nn.Module):
                 # cur_error_pca: float = check_embedding_error(pub_grad - mean, selected_pca)
                 # cur_error_pca: float = check_embedding_error(pub_grad, selected_pca)
                 self._pca = pca
+                self._noised_pca = noised_pca
                 # print('PUBLIC: Embedding error pca: %.2f%%' % (100 * cur_error_pca))
                 # print('PUBLIC: Approximate error pca: %.2f%%' % (100 * pub_error))
                 num_bases_list[i] = num_bases
                 # selected_bases_list.append(selected_bases.T.to(device))
                 # selected_pca_list.append(selected_pca)
-                del pub_grad, pub_grad_np, pca
+                del pub_grad, pub_grad_np, pca, noised_pca, noised_pub_grad, noised_pub_grad_np
                 # del pub_grad, pub_error, pca
 
             # self.selected_bases_list = selected_bases_list
@@ -382,6 +393,7 @@ class GEP(nn.Module):
 
             reconstruction_errs = []
             pca_reconstruction_errs = []
+            noised_pca_reconstruction_errs = []
             diff_approx_errs_list = []
             max_norm_grad: float = 0.0
             for i, num_param in enumerate(num_param_list):
@@ -403,9 +415,11 @@ class GEP(nn.Module):
 
                 approx_error: float = check_approx_error_np(self._pca.components_.T, grad_np)
                 approx_error_pca: float = check_approx_error_pca(self._pca, grad_np)
+                approx_error_noised_pca: float = check_approx_error_pca(self._noised_pca, grad_np)
                 diff_errors: float = abs(approx_error - approx_error_pca)
                 reconstruction_errs.append(approx_error)
                 pca_reconstruction_errs.append(approx_error_pca)
+                noised_pca_reconstruction_errs.append(approx_error_noised_pca)
                 diff_approx_errs_list.append(diff_errors)
                 # mean = grad.mean(1, keepdim=True)
                 # embedding_by_pca = torch.matmul(grad - mean, selected_pca)
@@ -430,6 +444,7 @@ class GEP(nn.Module):
                 del grad, embedding_by_pca, grad_np
             self.private_approx_error = reconstruction_errs
             self.private_approx_error_pca = pca_reconstruction_errs
+            self.private_approx_error_noised_pca = noised_pca_reconstruction_errs
             self.private_diff_approx_error = diff_approx_errs_list
 
             self._max_norm_grad = max_norm_grad

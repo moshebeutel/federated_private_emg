@@ -296,6 +296,7 @@ def federated_train_model(model,
 
                 private_approx_error = np.mean(gep.private_approx_error)
                 private_approx_error_pca = np.mean(gep.private_approx_error_pca)
+                private_approx_error_noised_pca = np.mean(gep.private_approx_error_noised_pca)
                 private_diff_approx_error = np.mean(gep.private_diff_approx_error)
 
                 log_dict.update({
@@ -305,6 +306,7 @@ def federated_train_model(model,
                     'PUBLIC_diff_approx_error': public_diff_approx_error,
                     'PRIVAT_approx_error': private_approx_error,
                     'PRIVAT_approx_error_pca': private_approx_error_pca,
+                    'PRIVAT_approx_error_noised_pca': private_approx_error_noised_pca,
                     'PRIVAT_diff_approx_error': private_diff_approx_error,
                 })
             wandb.log(log_dict)
