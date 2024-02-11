@@ -300,6 +300,10 @@ def federated_train_model(model,
                 private_diff_approx_error = np.mean(gep.private_diff_approx_error)
 
                 log_dict.update({
+                    'clipped_original_similarity': gep.clipped_original_similarity,
+                    'clipped_noised_similarity': gep.clipped_noised_similarity,
+                    'original_noised_similarity': gep.original_noised_similarity,
+                    'epoch_snr':gep.snr,
                     'epoch_max_norm_grad': gep.max_norm_grad,
                     'PUBLIC_approx_error': public_approx_error,
                     'PUBLIC_approx_error_pca': public_approx_error_pca,

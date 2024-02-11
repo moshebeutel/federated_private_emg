@@ -10,7 +10,7 @@ from tqdm import tqdm
 from federated_private_emg.common.utils import labels_to_consecutive, flatten_tensor
 from federated_private_emg.differential_privacy.params import DpParams
 from federated_private_emg.differential_privacy.accountant_utils import add_dp_noise
-from federated_private_emg.fed_priv_models.gep import GEP, get_approx_grad
+from federated_private_emg.fed_priv_models.gep import GEP, get_approx_grad, similarity
 from federated_private_emg.fed_priv_models.pFedGP.utils import build_tree
 from federated_private_emg.train.params import TrainParams
 from federated_private_emg.train.train_objects import TrainObjects
@@ -308,14 +308,31 @@ def gep_batch(gep, model, batch_size):
     gc.collect()
     if Config.ADD_DP_NOISE:
         # Perturbation
-        theta_noise = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
-                                   size=clipped_theta.shape,
-                                   device=clipped_theta.device) / batch_size
+        # theta_noise = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
+        #                            size=clipped_theta.shape,
+        #                            device=clipped_theta.device) / batch_size
         grad_noise = torch.normal(0, Config.GEP_SIGMA1 * Config.GEP_CLIP1,
                                   size=residual_grad.shape,
                                   device=residual_grad.device) / batch_size
 
-        clipped_theta += theta_noise
+        theta_noise = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
+                                   size=gep.clipped_embedding_pca.shape,
+                                   device=clipped_theta.device)
+
+        signal_power = torch.sum(torch.square(clipped_theta))
+        noise_power = torch.sum(torch.square(theta_noise))
+        gep.snr = 10 * torch.log10(signal_power / noise_power)
+
+        noised_clipped = torch.clone(theta_noise).cpu().detach().numpy() + gep.clipped_embedding_pca
+
+        gep.clipped_original_similarity = similarity(gep.clipped_embedding_pca, gep.non_clipped_embedding_pca)
+        gep.clipped_noised_similarity = similarity(gep.clipped_embedding_pca, noised_clipped)
+        gep.original_noised_similarity = similarity(noised_clipped, gep.non_clipped_embedding_pca)
+
+        clipped_grads = torch.from_numpy(gep.clipped_embedding_pca).to(clipped_theta.device)
+        clipped_grads += theta_noise.detach()
+        clipped_theta = clipped_grads.mean(0)
+        # clipped_theta += theta_noise
         residual_grad += grad_noise
         del theta_noise, grad_noise
 

@@ -52,6 +52,12 @@ def inplace_clipping(matrix, clip):
             col /= (col_norm / clip)
 
 
+def similarity(t1, t2):
+    k = np.diag(cosine_similarity(t1, t2))
+    norm_similarity = np.mean(np.abs(k), axis=0)
+    return norm_similarity
+
+
 def check_approx_error_pca(pca: PCA, target: np.array) -> float:
     """
         Calculate the normalized approximation error between the target matrix and its PCA reconstruction.
@@ -94,8 +100,7 @@ def check_approx_error_pca(pca: PCA, target: np.array) -> float:
 
     embedding: np.ndarray = pca.transform(target)
     approx: np.ndarray = pca.inverse_transform(embedding)
-    k = np.diag(cosine_similarity(target, approx))
-    norm_similarity = np.mean(np.abs(k), axis=0)
+    norm_similarity = similarity(target, approx)
     return 1.0 - norm_similarity
 
 
@@ -264,7 +269,11 @@ class GEP(nn.Module):
         self._noised_pca = PCA(n_components=num_bases)
         self._anchor_grads = None
         self._noised_anchor_grads = None
-
+        self.snr = 0
+        self.clipped_original_similarity = 0
+        self.clipped_noised_similarity = 0
+        self.original_noised_similarity = 0
+        self.non_clipped_embedding_pca = 0
         self.iter = 0
 
     @property
@@ -299,8 +308,8 @@ class GEP(nn.Module):
         else:
             anchor_grads = current_anchor_grads
         noise_for_anchor_grads: torch.tensor = torch.normal(0, Config.GEP_SIGMA0 * Config.GEP_CLIP0,
-                                   size=anchor_grads.shape,
-                                   device=anchor_grads.device) / Config.NUM_CLIENT_AGG
+                                                            size=anchor_grads.shape,
+                                                            device=anchor_grads.device) / Config.NUM_CLIENT_AGG
         self._anchor_grads = anchor_grads
         self._noised_anchor_grads = anchor_grads + noise_for_anchor_grads
         print(self._anchor_grads.shape)
@@ -451,6 +460,10 @@ class GEP(nn.Module):
             concatenated_embedding_pca = torch.cat(embedding_by_pca_list, dim=1)
 
             clipped_embedding_pca = clip_column(concatenated_embedding_pca, clip=self.clip0, inplace=False)
+
+            self.non_clipped_embedding_pca = torch.clone(concatenated_embedding_pca).cpu().detach().numpy()
+            self.clipped_embedding_pca = torch.clone(clipped_embedding_pca).cpu().detach().numpy()
+
 
             # avg_clipped_embedding = torch.sum(clipped_embedding, dim=0) / self.batch_size
             avg_clipped_embedding_pca = torch.sum(clipped_embedding_pca, dim=0) / self.batch_size

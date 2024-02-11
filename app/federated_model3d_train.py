@@ -25,11 +25,12 @@ def main():
     #
     #     print('USERS_VARIANCES', {u: '%.3f' % b for u, b in USERS_VARIANCES.items()})
     # update_accountant_params()
-    Config.WRITE_TO_WANDB = True
+    Config.WRITE_TO_WANDB = False
 
-    Config.DATASET = Config.DATASET_TYPE.CIFAR100
+    Config.DATASET = Config.DATASET_TYPE.CIFAR10
 
-    Config.CLASSES_PER_USER = Config.CIFAR10_CLASSES_PER_USER if Config.CIFAR10_DATA else Config.CIFAR100_CLASSES_PER_USER
+    Config.CLASSES_PER_USER = Config.CIFAR10_CLASSES_PER_USER if Config.CIFAR10_DATA else\
+        Config.CIFAR100_CLASSES_PER_USER
 
     Config.SANITY_CHECK = False
     Config.DP_METHOD = Config.DP_METHOD_TYPE.GEP
@@ -41,7 +42,7 @@ def main():
     Config.ADD_DP_NOISE = True
     Config.NUM_CLIENT_AGG = 50
 
-    sigma = 0.0 # 4.722  # 12.79 # 107.46
+    sigma = 12.79 #2.016  # 4.722  # 12.79 # 107.46
     clip = 0.01
     if Config.USE_GEP:
         Config.GEP_CLIP0 = clip
@@ -50,9 +51,9 @@ def main():
         Config.GEP_SIGMA0 = sigma
         Config.GEP_SIGMA1 = sigma
 
-        Config.NUM_CLIENTS_PUBLIC = 150
-        Config.GEP_HISTORY_GRADS = 150
-        Config.GEP_NUM_BASES = 150
+        Config.NUM_CLIENTS_PUBLIC = 20
+        Config.GEP_HISTORY_GRADS = 200
+        Config.GEP_NUM_BASES = 140
         Config.GEP_NUM_GROUPS = 1
         Config.GEP_USE_PCA = 1
 
@@ -302,14 +303,15 @@ def run_sweep():
 
     parameters_dict.update({
         'clip': {
-            'values': [4.0]
-            # 'values': [0.01]
+            # 'values': [3.0]
+            'values': [1.0, 0.1, 0.01]
             # 'values': [1000000, 0.01]
         },
         'sigma': {
-            'values': [12.79, 4.722, 2.016, 0.0]
+            # 'values': [12.79, 4.722, 2.016, 0.0]
             # 'values': [0.0]
-            # 'values': [12.79]
+            # 'values': [12.79, 2.016]
+            'values': [12.79, 4.722, 2.016, 0.0]
             # ϵ = 0.01→ noise - multiplier = 874.16
             # ϵ = 0.1→ noise - multiplier = 107.46
             # ϵ = 1.0→ noise - multipllier = 12.79
@@ -317,7 +319,8 @@ def run_sweep():
             # ϵ = 8.0→ noise - multipllier = 2.016
         },
         'seed': {
-            'values': [20, 60]
+            # 'values': [20]
+            'values': [30, 70]
             # 'values': [20, 40, 60]
         },
         # 'sample_with_replacement': {
@@ -332,12 +335,14 @@ def run_sweep():
             # 'values': ['GEP_NO_RESIDUALS', 'GEP_RESIDUALS', 'SGD_DP']
         },
         'num_clients_public': {
-            'values': [50, 150]
+            'values': [50]
+            # 'values': [10, 100]
             # 'values': [10]
         },
         'classes_each_user': {
             # 'values': [2, 6, 10]
-            'values': [2, 10]
+            'values': [2]
+            # 'values': [2, 10]
             # 'values': [10, 100]
         },
         # 'use_gp': {
@@ -346,7 +351,9 @@ def run_sweep():
         # },
         'gep_num_bases': {
             # 'values': [100, 150]
-            'values': [50, 150]
+            'values': [100]
+            # 'values': [100]
+            # 'values': [10, 100]
         },
     })
 
@@ -356,5 +363,5 @@ def run_sweep():
 
 
 if __name__ == '__main__':
-    # main()
-    run_sweep()
+    main()
+    # run_sweep()

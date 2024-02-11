@@ -26,6 +26,8 @@ def init_model():
             torch.nn.init.kaiming_normal_(m.weight)
             if m.bias is not None:
                 m.bias.data.zero_()
+    num_of_trained_params: int = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info(f'Model {model} number of parameters: {num_of_trained_params}')
     return model
 
 
